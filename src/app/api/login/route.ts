@@ -23,10 +23,12 @@ interface ErrorResponse {
 }
 
 const afterSuccessfullLogin = (user: IUser) => {
+	const { password, ...userWithoutPassword } = user.toObject()
+
 	const successResponse: SuccessResponse = {
 		status: 'success',
 		message: 'Logged in successfully',
-		data: user,
+		data: userWithoutPassword,
 	}
 
 	const token = jwt.sign(
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
 			const errorResponse: ErrorResponse = {
 				status: 'error',
 				errorType: 'VALIDATION',
-				message: 'All fields must filled.',
+				message: 'All fields must be filled.',
 			}
 			return NextResponse.json(errorResponse, { status: 400 })
 		}

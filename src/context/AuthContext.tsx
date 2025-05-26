@@ -27,8 +27,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 		setError(null)
 
 		try {
-			await axios.post('/api/login', { email, password })
-			setUser(email)
+			const { data } = await axios.post('/api/login', { email, password })
+			localStorage.setItem(
+				'task-manager-v1_USER',
+				JSON.stringify(data.data),
+			)
 
 			router.push('/dashboard')
 
@@ -58,13 +61,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 			await axios.get('/api/logout')
 			setUser(null)
 			router.push('/auth/login')
+			localStorage.removeItem('task-manager-v1_USER')
 			showAlertToast('Logged out successfully', {
 				variant: 'success',
 				title: 'Success',
 			})
 		} catch (error) {
 			console.error(error)
-			
+
 			showAlertToast('Logout failed', {
 				variant: 'error',
 				title: 'Error',
