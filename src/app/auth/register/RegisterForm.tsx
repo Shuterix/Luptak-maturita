@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import axios from 'axios'
 import { isAxiosError } from 'axios'
+import { showAlertToast } from '@/components/toast/Toast'
+import { useRouter } from 'next/navigation'
 
 interface RegisterFormInputs {
 	firstName: string
@@ -21,22 +22,30 @@ export default function RegisterForm() {
 		formState: { errors },
 	} = useForm<RegisterFormInputs>()
 
-	const [errorMessage, setErrorMessage] = useState('')
-	const [successMessage, setSuccessMessage] = useState('')
+	const router = useRouter()
 
 	const onSubmit = async (credentials: RegisterFormInputs) => {
-		setErrorMessage('')
-		setSuccessMessage('')
-
 		try {
 			const response = await axios.post('/api/register', credentials)
 
-			console.log(response)
+			router.push('/auth/login')
 
-			setSuccessMessage(response.data.message)
+			showAlertToast(response.data.message, {
+				variant: 'success',
+				title: 'Success',
+			})
 		} catch (error: unknown) {
 			console.error(error)
-			setErrorMessage(isAxiosError(error) && error.response ? error.response.data.message : 'An unexpected error occurred.')
+
+			showAlertToast(
+				isAxiosError(error) && error.response
+					? error.response.data.message
+					: 'An unexpected error occurred.',
+				{
+					variant: 'error',
+					title: 'Error',
+				},
+			)
 		}
 	}
 
@@ -146,16 +155,6 @@ export default function RegisterForm() {
 				)}
 			</div>
 			<div className="form-control">
-				{errorMessage && (
-					<p className="text-error text-center justify-center text-sm mt-1 mb-4">
-						{errorMessage}
-					</p>
-				)}
-				{successMessage && (
-					<p className="text-success text-center justify-center text-sm mt-1 mb-4">
-						{successMessage}
-					</p>
-				)}
 				<button type="submit" className="btn btn-primary w-full">
 					Register
 				</button>

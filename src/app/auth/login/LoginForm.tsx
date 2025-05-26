@@ -1,10 +1,7 @@
 'use client'
 
 import { useForm } from 'react-hook-form'
-import { useState } from 'react'
-import axios from 'axios'
-import { isAxiosError } from 'axios'
-import { useRouter } from 'next/navigation'
+import { useAuth } from '@/context/AuthContext'
 
 interface LoginFormInputs {
 	email: string
@@ -12,30 +9,15 @@ interface LoginFormInputs {
 }
 
 export default function LoginForm() {
+	const { login, isLoading } = useAuth()
 	const {
 		register,
 		handleSubmit,
 		formState: { errors },
 	} = useForm<LoginFormInputs>()
 
-	const router = useRouter()
-
-	const [errorMessage, setErrorMessage] = useState('')
-	const [successMessage, setSuccessMessage] = useState('')
-
-	const onSubmit = async (credentials: LoginFormInputs) => {
-		try {
-			const response = await axios.post('/api/login', credentials)
-
-			setSuccessMessage(response.data.message)
-
-			setTimeout(() => {
-				router.push('/dashboard')
-			}, 500)
-		} catch (error: unknown) {
-			console.error(error)
-			setErrorMessage(isAxiosError(error) && error.response ? error.response.data.message : 'An unexpected error occurred.')
-		}
+	const onSubmit = async (data: LoginFormInputs) => {
+		await login(data.email, data.password)
 	}
 
 	return (
@@ -49,7 +31,7 @@ export default function LoginForm() {
 					placeholder="email@example.com"
 					className="input input-bordered"
 					{...register('email', {
-						required: true,
+						required: 'Email is required',
 						pattern: {
 							value: /^\S+@\S+$/i,
 							message: 'Invalid email address',
@@ -57,9 +39,12 @@ export default function LoginForm() {
 					})}
 				/>
 				{errors.email && (
-					<p className="text-error text-sm">{errors.email.message}</p>
+					<p className="text-error text-sm mt-1">
+						{errors.email.message}
+					</p>
 				)}
 			</div>
+
 			<div className="form-control">
 				<label className="label">
 					<span className="label-text text-sm">Password</span>
@@ -69,28 +54,27 @@ export default function LoginForm() {
 					placeholder="••••••••"
 					className="input input-bordered"
 					{...register('password', {
-						required: 'Password is required.',
+						required: 'Password is required',
 					})}
 				/>
 				{errors.password && (
-					<p className="text-error text-sm">
+					<p className="text-error text-sm mt-1">
 						{errors.password.message}
 					</p>
 				)}
 			</div>
-			<div className="form-control">
-				{errorMessage && (
-					<p className="text-error text-center justify-center text-sm mt-1 mb-4">
-						{errorMessage}
-					</p>
-				)}
-				{successMessage && (
-					<p className="text-success text-center justify-center text-sm mt-1 mb-4">
-						{successMessage}
-					</p>
-				)}
-				<button type="submit" className="btn btn-primary w-full">
-					Login
+
+			<div className="form-control mt-6">
+				<button
+					type="submit"
+					className="btn btn-primary w-full"
+					disabled={isLoading}
+				>
+					{isLoading ? (
+						<span className="loading loading-spinner"></span>
+					) : (
+						'Login'
+					)}
 				</button>
 			</div>
 		</form>

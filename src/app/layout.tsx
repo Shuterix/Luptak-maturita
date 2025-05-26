@@ -1,4 +1,6 @@
 import './globals.css'
+import { AppProviders } from '@/context/Providers'
+import { Toaster } from 'sonner'
 
 export const metadata = {
 	title: 'Next.js',
@@ -12,7 +14,12 @@ export default function RootLayout({
 }) {
 	return (
 		<html lang="en">
-			<body>{children}</body>
+			<body>
+				<AppProviders>
+					{children}
+					<Toaster position="bottom-right" />
+				</AppProviders>
+			</body>
 		</html>
 	)
 }

@@ -1,23 +1,23 @@
-import { NextResponse } from "next/server"
-import connectToDatabase from "@/lib/mongodb"
-import User from "@/models/User"
-import bcrypt from "bcryptjs"
+import { NextResponse } from 'next/server'
+import connectToDatabase from '@/lib/mongodb'
+import User from '@/models/User'
+import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { IUser } from "@/models/User"
+import { IUser } from '@/models/User'
 
 interface Credentials {
-	email: string,
+	email: string
 	password: string
 }
 
 interface SuccessResponse {
-	status: 'success',
-	message: string,
+	status: 'success'
+	message: string
 	data?: object
 }
 
 interface ErrorResponse {
-	status: 'error',
+	status: 'error'
 	errorType: 'WRONG_PASSWORD' | 'NONEXISTING_EMAIL' | 'VALIDATION'
 	message: string
 }
@@ -26,13 +26,13 @@ const afterSuccessfullLogin = (user: IUser) => {
 	const successResponse: SuccessResponse = {
 		status: 'success',
 		message: 'Logged in successfully',
-		data: user
+		data: user,
 	}
 
 	const token = jwt.sign(
-		{ userId: user._id, email: user.email},
+		{ userId: user._id, email: user.email },
 		process.env.JWT_SECRET as string,
-		{ expiresIn: '7d' }
+		{ expiresIn: '7d' },
 	)
 
 	const response = NextResponse.json(successResponse, { status: 200 })
@@ -54,31 +54,31 @@ export async function POST(request: Request) {
 		await connectToDatabase()
 
 		const data: Credentials = await request.json()
-		if(!data.email || !data.password) {
+		if (!data.email || !data.password) {
 			const errorResponse: ErrorResponse = {
 				status: 'error',
 				errorType: 'VALIDATION',
-				message: 'All fields must filled.'
+				message: 'All fields must filled.',
 			}
 			return NextResponse.json(errorResponse, { status: 400 })
 		}
 
-		const user = await User.findOne({email: data.email})
-		if(!user) {
+		const user = await User.findOne({ email: data.email })
+		if (!user) {
 			const errorResponse: ErrorResponse = {
 				status: 'error',
 				errorType: 'NONEXISTING_EMAIL',
-				message: 'This email has not been registered'
+				message: 'This email has not been registered',
 			}
-			return NextResponse.json(errorResponse, { status: 404})
+			return NextResponse.json(errorResponse, { status: 404 })
 		}
 
 		const isMatch = await bcrypt.compare(data.password, user.password)
-		if(!isMatch) {
+		if (!isMatch) {
 			const errorResponse: ErrorResponse = {
 				status: 'error',
 				errorType: 'WRONG_PASSWORD',
-				message: 'Wrong password'
+				message: 'Wrong password',
 			}
 			return NextResponse.json(errorResponse, { status: 401 })
 		}
@@ -87,6 +87,9 @@ export async function POST(request: Request) {
 	} catch (error) {
 		console.error('Error during login', error)
 
-		return NextResponse.json({ message: 'Something went wrong' }, { status: 500 })
+		return NextResponse.json(
+			{ message: 'Something went wrong' },
+			{ status: 500 },
+		)
 	}
 }
