@@ -7,7 +7,7 @@ import { isAxiosError } from 'axios'
 import { showAlertToast } from '@/components/toast/Toast'
 
 interface AuthContextType {
-	user: string | null
+	user: object | null
 	login: (email: string, password: string) => Promise<void>
 	logout: () => Promise<void>
 	isLoading: boolean
@@ -17,7 +17,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-	const [user, setUser] = useState<string | null>(null)
+	const [user, setUser] = useState<object | null>(null)
 	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const router = useRouter()
@@ -28,10 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 		try {
 			const { data } = await axios.post('/api/login', { email, password })
-			localStorage.setItem(
-				'task-manager-v1_USER',
-				JSON.stringify(data.data),
-			)
+			setUser(data.data)
 
 			router.push('/dashboard')
 
@@ -61,7 +58,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 			await axios.get('/api/logout')
 			setUser(null)
 			router.push('/auth/login')
-			localStorage.removeItem('task-manager-v1_USER')
+			setUser(null)
 			showAlertToast('Logged out successfully', {
 				variant: 'success',
 				title: 'Success',

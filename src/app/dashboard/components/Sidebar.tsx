@@ -1,5 +1,14 @@
 import Link from 'next/link'
-import { Home, Settings, LogOut, User, HelpCircle, Shield } from 'lucide-react'
+import {
+	Home,
+	Settings,
+	LogOut,
+	User,
+	HelpCircle,
+	Shield,
+	CircleUser,
+	Circle,
+} from 'lucide-react'
 import { ActionButton } from './ActionButton'
 import { LogoutButton } from './LogoutButton'
 
@@ -21,6 +30,11 @@ export default function Sidebar() {
 			name: 'Users',
 			href: '/dashboard/users',
 			icon: <User className="h-5 w-5" />,
+		},
+		{
+			name: 'Profile',
+			href: '/dashboard/profile',
+			icon: <CircleUser className="h-5 w-5" />,
 		},
 	]
 
@@ -53,7 +67,7 @@ export default function Sidebar() {
 				<div className="mb-4 p-4 flex items-center space-x-2">
 					<Shield className="h-6 w-6 text-primary" />
 					<Link href="/dashboard" className="text-xl font-bold">
-						Your App
+						Project V1
 					</Link>
 				</div>
 
