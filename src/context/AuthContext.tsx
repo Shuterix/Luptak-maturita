@@ -1,6 +1,12 @@
 'use client'
 
-import { createContext, useContext, useState, ReactNode } from 'react'
+import {
+	createContext,
+	useContext,
+	useState,
+	ReactNode,
+	useEffect,
+} from 'react'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
 import { isAxiosError } from 'axios'
@@ -18,19 +24,34 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
 	const [user, setUser] = useState<object | null>(null)
-	const [isLoading, setIsLoading] = useState(false)
+	const [isLoading, setIsLoading] = useState<boolean>(false)
 	const [error, setError] = useState<string | null>(null)
 	const router = useRouter()
+
+	useEffect(() => {
+		const storedUser = localStorage.getItem('task-manager-v1_USER')
+		if (storedUser) setUser(JSON.parse(storedUser))
+	}, [])
 
 	const login = async (email: string, password: string) => {
 		setIsLoading(true)
 		setError(null)
 
 		try {
-			const { data } = await axios.post('/api/login', { email, password })
-			setUser(data.data)
+			const { data } = await axios.post('/api/auth/login', {
+				email,
+				password,
+			})
 
-			router.push('/dashboard')
+			setUser(data.user)
+
+			localStorage.setItem(
+				'task-manager-v1_USER',
+				JSON.stringify(data.user),
+			)
+
+			if (data.user.onboardingStep === 4) router.push('/dashboard')
+			else router.push('/onboarding')
 
 			showAlertToast('Login successful!', {
 				variant: 'success',
@@ -55,10 +76,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 	const logout = async () => {
 		try {
-			await axios.get('/api/logout')
+			await axios.get('/api/auth/logout')
 			setUser(null)
 			router.push('/auth/login')
 			setUser(null)
+			localStorage.removeItem('task-manager-v1_USER')
 			showAlertToast('Logged out successfully', {
 				variant: 'success',
 				title: 'Success',

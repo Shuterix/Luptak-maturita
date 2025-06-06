@@ -26,7 +26,7 @@ export default function RegisterForm() {
 
 	const onSubmit = async (credentials: RegisterFormInputs) => {
 		try {
-			const response = await axios.post('/api/register', credentials)
+			const response = await axios.post('/api/auth/register', credentials)
 
 			router.push('/auth/login')
 

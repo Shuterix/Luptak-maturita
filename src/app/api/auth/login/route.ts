@@ -13,7 +13,7 @@ interface Credentials {
 interface SuccessResponse {
 	status: 'success'
 	message: string
-	data?: object
+	user?: object
 }
 
 interface ErrorResponse {
@@ -23,12 +23,13 @@ interface ErrorResponse {
 }
 
 const afterSuccessfullLogin = (user: IUser) => {
-	const { password, ...userWithoutPassword } = user.toObject()
+	const userWithoutPassword = user.toObject()
+	delete userWithoutPassword.password
 
 	const successResponse: SuccessResponse = {
 		status: 'success',
 		message: 'Logged in successfully',
-		data: userWithoutPassword,
+		user: userWithoutPassword,
 	}
 
 	const token = jwt.sign(
@@ -38,10 +39,19 @@ const afterSuccessfullLogin = (user: IUser) => {
 	)
 
 	const response = NextResponse.json(successResponse, { status: 200 })
+
 	response.cookies.set('token', token, {
 		name: 'token',
 		value: token,
 		httpOnly: true,
+		path: '/',
+		secure: process.env.NODE_ENV === 'production',
+		sameSite: 'lax',
+		maxAge: 60 * 60 * 24 * 7,
+	})
+
+	response.cookies.set('onboardingStep', String(user.onboardingStep ?? 0), {
+		httpOnly: false,
 		path: '/',
 		secure: process.env.NODE_ENV === 'production',
 		sameSite: 'lax',

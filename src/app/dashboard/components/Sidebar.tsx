@@ -7,7 +7,6 @@ import {
 	HelpCircle,
 	Shield,
 	CircleUser,
-	Circle,
 } from 'lucide-react'
 import { ActionButton } from './ActionButton'
 import { LogoutButton } from './LogoutButton'
