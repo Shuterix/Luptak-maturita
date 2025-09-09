@@ -20,7 +20,7 @@ interface OnboardingContextType {
 	initialized: boolean
 	userData: Partial<User>
 	setUserData: Dispatch<SetStateAction<Partial<User>>>
-	saveUserDataToDB: () => Promise<void>
+	saveUserDataToDB: (data: Partial<User>) => Promise<void>
 }
 
 export interface User {
@@ -51,19 +51,19 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
 			) {
 				setStep(user.onboardingStep)
 			}
+			setInitialized(true)
 		}
-		setInitialized(true)
 	}, [user])
 
 	// Save user data to backend
-	const saveUserDataToDB = async () => {
-		if (!user || hasSavedRef.current) return
+	const saveUserDataToDB = async (data: Partial<User>) => {
+		if (!data || hasSavedRef.current) return
 		hasSavedRef.current = true
 		try {
 			await axios.patch('/api/users/update-onboarding', {
-				userId: user._id,
+				userId: data._id,
 				onboardingStep: step === 2 ? step -1 : step,
-				role: userData.role,
+				role: data.role,
 			})
 		} catch (err) {
 			console.error('Failed to save user data:', err)
@@ -73,15 +73,6 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
 			})
 		}
 	}
-
-	// Save before window unload / refresh
-	useEffect(() => {
-		const handleUnload = () => {
-			saveUserDataToDB()
-		}
-		window.addEventListener('beforeunload', handleUnload)
-		return () => window.removeEventListener('beforeunload', handleUnload)
-	}, [user, step, userData])
 
 	return (
 		<OnboardingContext.Provider

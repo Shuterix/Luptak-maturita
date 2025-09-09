@@ -58,7 +58,6 @@ export async function PATCH(request: NextRequest) {
 		return NextResponse.json({ message: 'User not found.' }, { status: 404 })
 	}
 
-	// ✅ Build response and set cookie
 	const res = NextResponse.json(
 		{
 			message: 'Onboarding step updated successfully.',
@@ -68,6 +67,13 @@ export async function PATCH(request: NextRequest) {
 	)
 
 	res.cookies.set('onboardingStep', updatedUser.onboardingStep.toString(), {
+		httpOnly: true,
+		secure: process.env.NODE_ENV === 'production',
+		sameSite: 'lax',
+		path: '/',
+	})
+
+	res.cookies.set('role', updatedUser.role, {
 		httpOnly: true,
 		secure: process.env.NODE_ENV === 'production',
 		sameSite: 'lax',

@@ -73,25 +73,29 @@ const stepDefinitions: StepDefinition[] = [
 ]
 
 export default function OnboardingSteps() {
-	const { step, setStep, initialized, userData } = useOnboarding()
+	const { step, setStep, initialized, userData, saveUserDataToDB } = useOnboarding()
 	const { isLoading, showLoader, hideLoader } = useLoading()
 	const router = useRouter()
 
-	const [canRender, setCanRender] = useState(false)
 	const [isStepValid, setIsStepValid] = useState(false)
 	const [newUserData, setNewUserData] = useState<Partial<User>>({})
-	const [filterUserData, setFilterUserData] = useState<Partial<User>>({})
 
 	useEffect(() => {
-		if (initialized && userData) {
+		if (initialized && userData && Object.keys(userData).length > 0) {
 			const updated = { ...userData, createNewClub: null }
 			setNewUserData(updated)
-			setFilterUserData(updated)
-			setTimeout(() => setCanRender(true), 100)
 		}
 	}, [initialized, userData])
 
-	if (!canRender || isLoading) {
+	useEffect(() => {
+		const handleUnload = () => {
+			saveUserDataToDB(newUserData)
+		}
+		window.addEventListener('beforeunload', handleUnload)
+		return () => window.removeEventListener('beforeunload', handleUnload)
+	}, [newUserData])
+
+	if (!initialized || !userData || isLoading || Object.keys(newUserData).length === 0) {
 		return (
 			<div className="min-h-screen flex items-center justify-center">
 				<span className="loading loading-spinner text-primary"></span>
@@ -100,16 +104,17 @@ export default function OnboardingSteps() {
 	}
 
 	const filteredSteps = stepDefinitions.filter(
-		(def) => def.key === 'role' || !def.condition || def.condition(filterUserData)
+		(def) => def.key === 'role' || !def.condition || def.condition(newUserData)
 	)
 
 	const progressBarSteps = stepDefinitions.filter(
 		(def) => def.key === 'role' || !def.condition || def.condition(newUserData)
 	)
 
-	const totalSteps = progressBarSteps.length
-	const currentStep = filteredSteps[step]
-	if (!currentStep) return null
+	const totalSteps = newUserData.role ? progressBarSteps.length : 2
+	const currentStep = userData.role ? filteredSteps[step] : step === 0 ? filteredSteps[0] : filteredSteps[1]
+
+	if(!currentStep) return null
 
 	const StepComponent = currentStep.component
 	const progress = ((step + 1) / totalSteps) * 100
@@ -123,11 +128,7 @@ export default function OnboardingSteps() {
 	}
 
 	const next = () => {
-		setFilterUserData(newUserData)
-		const currentFilteredSteps = stepDefinitions.filter(
-			(def) => def.key === 'role' || !def.condition || def.condition(filterUserData)
-		)
-		setStep((s) => Math.min(s + 1, currentFilteredSteps.length - 1))
+		setStep((s) => Math.min(s + 1, filteredSteps.length - 1))
 	}
 
 	const back = () => setStep((s) => Math.max(s - 1, 0))
@@ -140,7 +141,7 @@ export default function OnboardingSteps() {
 				return currentStep.key === 'trainerJoin'
 			return false
 		}
-		return step === totalSteps - 1
+		return step === 0 ? false : step === totalSteps - 1
 	}
 
 	const finish = async () => {
@@ -158,12 +159,14 @@ export default function OnboardingSteps() {
 					userId: userData._id,
 				})
 			} else if (newUserData.role === 'trainer') {
+
 				if (newUserData.createNewClub) {
 					await axios.post('/api/clubs/create', {
 						userId: userData._id,
-						clubName: newUserData.clubName || 'My Club',
+						clubName: newUserData.clubName,
 						description: newUserData.clubDescription,
 					})
+
 				} else if (newUserData.clubCode) {
 					await axios.post('/api/clubs/join', {
 						clubCode: newUserData.clubCode,

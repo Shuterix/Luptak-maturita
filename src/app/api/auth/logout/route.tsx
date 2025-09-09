@@ -15,6 +15,8 @@ export async function GET() {
 
 		const response = NextResponse.json(successResponse, { status: 200 })
 		response.cookies.delete('token')
+		response.cookies.delete('onboardingStep')
+		response.cookies.delete('role')
 
 		return response
 	} catch (error) {

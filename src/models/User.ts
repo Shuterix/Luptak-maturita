@@ -24,7 +24,7 @@ const UserSchema: Schema<IUser> = new Schema(
 		lastName: { type: String, required: true },
 		email: { type: String, required: true, unique: true },
 		password: { type: String, required: true },
-		role: { type: String, enum: ['student', 'trainer', 'admin'], required: true },
+		role: { type: String, enum: ['student', 'trainer', 'admin'] },
 		clubId: { type: Schema.Types.ObjectId, ref: 'Club' },
 		partnerId: { type: Schema.Types.ObjectId, ref: 'User' },
 		profile: {

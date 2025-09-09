@@ -27,7 +27,8 @@ export function middleware(request: NextRequest) {
 	}
 
 	if (token) {
-		const onboardingComplete = onboardingStep >= 2
+		const role = request.cookies.get('role')?.value || 'user'
+		const onboardingComplete = role === 'trainer' ? onboardingStep >= 2 : onboardingStep >= 1
 
 		if (pathname.startsWith('/dashboard') && !onboardingComplete) {
 			return NextResponse.redirect(new URL('/onboarding', request.url))

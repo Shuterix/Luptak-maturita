@@ -58,6 +58,14 @@ const afterSuccessfullLogin = (user: IUser) => {
 		maxAge: 60 * 60 * 24 * 7,
 	})
 
+	response.cookies.set('role', String(user.role ?? 'user'), {
+		httpOnly: false,
+		path: '/',
+		secure: process.env.NODE_ENV === 'production',
+		sameSite: 'lax',
+		maxAge: 60 * 60 * 24 * 7,
+	})
+
 	return response
 }
 

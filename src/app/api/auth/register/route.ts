@@ -66,9 +66,12 @@ export async function POST(request: Request) {
 	} catch (error) {
 		console.error('Error during registration:', error)
 
-		return NextResponse.json(
-			{ message: 'Something went wrong' },
-			{ status: 500 },
-		)
+		const errorResponse: ErrorResponse = {
+			status: 'error',
+			errorType: 'SERVER_ERROR',
+			message: 'Something went wrong. Please try again later.',
+		}
+
+		return NextResponse.json(errorResponse, { status: 500 })
 	}
 }
