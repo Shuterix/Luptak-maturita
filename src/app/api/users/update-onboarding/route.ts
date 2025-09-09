@@ -6,27 +6,25 @@ import jwt, { JwtPayload } from 'jsonwebtoken'
 interface OnboardingRequestBody {
 	userId: string
 	onboardingStep: number
+	role?: 'student' | 'trainer' | 'admin'
 }
 
 interface DecodedToken extends JwtPayload {
 	userId: string
-	role?: 'student' | 'coach' | 'admin'
+	role?: 'student' | 'trainer' | 'admin'
 }
 
 export async function PATCH(request: NextRequest) {
 	await connectToDatabase()
 
 	const token = request.cookies.get('token')?.value
-	if (!token)
+	if (!token) {
 		return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+	}
 
 	let loggedInUser: DecodedToken
-
 	try {
-		loggedInUser = jwt.verify(
-			token,
-			process.env.JWT_SECRET!,
-		) as DecodedToken
+		loggedInUser = jwt.verify(token, process.env.JWT_SECRET!) as DecodedToken
 	} catch {
 		return NextResponse.json({ message: 'Invalid token' }, { status: 401 })
 	}
@@ -35,10 +33,7 @@ export async function PATCH(request: NextRequest) {
 
 	if (!body.userId || typeof body.onboardingStep !== 'number') {
 		return NextResponse.json(
-			{
-				message:
-					'Invalid request. Must include userId and onboardingStep.',
-			},
+			{ message: 'Invalid request. Must include userId and onboardingStep.' },
 			{ status: 400 },
 		)
 	}
@@ -52,22 +47,32 @@ export async function PATCH(request: NextRequest) {
 
 	const updatedUser = await User.findByIdAndUpdate(
 		body.userId,
-		{ onboardingStep: body.onboardingStep },
+		{ 
+			onboardingStep: body.onboardingStep, 
+			role: body.role,
+		},
 		{ new: true },
 	)
 
 	if (!updatedUser) {
-		return NextResponse.json(
-			{ message: 'User not found.' },
-			{ status: 404 },
-		)
+		return NextResponse.json({ message: 'User not found.' }, { status: 404 })
 	}
 
-	return NextResponse.json(
+	// ✅ Build response and set cookie
+	const res = NextResponse.json(
 		{
 			message: 'Onboarding step updated successfully.',
 			step: updatedUser.onboardingStep,
 		},
 		{ status: 200 },
 	)
+
+	res.cookies.set('onboardingStep', updatedUser.onboardingStep.toString(), {
+		httpOnly: true,
+		secure: process.env.NODE_ENV === 'production',
+		sameSite: 'lax',
+		path: '/',
+	})
+
+	return res
 }

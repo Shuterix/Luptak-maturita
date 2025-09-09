@@ -17,7 +17,7 @@ export function middleware(request: NextRequest) {
 	if (pathname === '/') {
 		if (!token)
 			return NextResponse.redirect(new URL('/auth/login', request.url))
-		if (onboardingStep < 4)
+		if (onboardingStep < 2)
 			return NextResponse.redirect(new URL('/onboarding', request.url))
 		return NextResponse.redirect(new URL('/dashboard', request.url))
 	}
@@ -27,7 +27,7 @@ export function middleware(request: NextRequest) {
 	}
 
 	if (token) {
-		const onboardingComplete = onboardingStep >= 4
+		const onboardingComplete = onboardingStep >= 2
 
 		if (pathname.startsWith('/dashboard') && !onboardingComplete) {
 			return NextResponse.redirect(new URL('/onboarding', request.url))

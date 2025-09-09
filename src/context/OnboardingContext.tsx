@@ -1,55 +1,72 @@
 'use client'
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import {
+	createContext,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+	ReactNode,
+	Dispatch,
+	SetStateAction,
+} from 'react'
 import { useAuth } from './AuthContext'
 import axios from 'axios'
 import { showAlertToast } from '@/components/toast/Toast'
-import { Dispatch, SetStateAction } from 'react'
 
 interface OnboardingContextType {
 	step: number
 	setStep: Dispatch<SetStateAction<number>>
-	saveStepToDB: () => Promise<void>
 	initialized: boolean
+	userData: Partial<User>
+	setUserData: Dispatch<SetStateAction<Partial<User>>>
+	saveUserDataToDB: () => Promise<void>
 }
 
-interface User {
+export interface User {
 	_id: string
 	onboardingStep?: number
+	role?: 'student' | 'trainer' | 'admin'
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(
 	undefined,
 )
 
-export const OnboardingProvider = ({
-	children,
-}: {
-	children: React.ReactNode
-}) => {
+export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
 	const { user } = useAuth() as { user: User | null }
-	const [step, setStep] = useState<number>(0)
-	const hasSavedRef = useRef(false)
-	const [initialized, setInitialized] = useState(false)
 
+	const [step, setStep] = useState<number>(0)
+	const [userData, setUserData] = useState<Partial<User>>(user ?? {})
+	const [initialized, setInitialized] = useState(false)
+	const hasSavedRef = useRef(false)
+
+	// Initialize onboarding
 	useEffect(() => {
-		if (user?.onboardingStep !== undefined) {
-			setStep(user.onboardingStep)
+		if (user) {
+			setUserData(user)
+			if (
+				typeof user.onboardingStep === 'number' &&
+				user.onboardingStep >= 0
+			) {
+				setStep(user.onboardingStep)
+			}
 		}
 		setInitialized(true)
 	}, [user])
 
-	const saveStepToDB = async () => {
+	// Save user data to backend
+	const saveUserDataToDB = async () => {
 		if (!user || hasSavedRef.current) return
 		hasSavedRef.current = true
-
 		try {
 			await axios.patch('/api/users/update-onboarding', {
 				userId: user._id,
-				onboardingStep: step,
+				onboardingStep: step === 2 ? step -1 : step,
+				role: userData.role,
 			})
 		} catch (err) {
-			console.error('Failed to save onboarding step:', err)
+			console.error('Failed to save user data:', err)
 			showAlertToast('Onboarding progress not saved.', {
 				variant: 'error',
 				title: 'Error',
@@ -57,23 +74,25 @@ export const OnboardingProvider = ({
 		}
 	}
 
+	// Save before window unload / refresh
 	useEffect(() => {
 		const handleUnload = () => {
-			if (user && hasSavedRef.current === false) {
-				saveStepToDB()
-			}
+			saveUserDataToDB()
 		}
-
 		window.addEventListener('beforeunload', handleUnload)
-
-		return () => {
-			window.removeEventListener('beforeunload', handleUnload)
-		}
-	}, [user, step])
+		return () => window.removeEventListener('beforeunload', handleUnload)
+	}, [user, step, userData])
 
 	return (
 		<OnboardingContext.Provider
-			value={{ step, setStep, saveStepToDB, initialized }}
+			value={{
+				step,
+				setStep,
+				initialized,
+				userData,
+				setUserData,
+				saveUserDataToDB,
+			}}
 		>
 			{children}
 		</OnboardingContext.Provider>

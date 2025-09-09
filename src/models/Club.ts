@@ -5,7 +5,7 @@ export interface IClub extends Document {
 	description?: string
 	logoUrl?: string
 	code: string
-	coaches: Types.ObjectId[]
+	trainers: Types.ObjectId[]
 	students: Types.ObjectId[]
 	pairIds: Types.ObjectId[]
 	scheduleIds: Types.ObjectId[]
@@ -23,7 +23,7 @@ const ClubSchema: Schema<IClub> = new Schema(
 		description: { type: String },
 		logoUrl: { type: String },
 		code: { type: String, required: true, unique: true },
-		coaches: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+		trainers: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 		students: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 		pairIds: [{ type: Schema.Types.ObjectId, ref: 'Pair' }],
 		scheduleIds: [{ type: Schema.Types.ObjectId, ref: 'Lesson' }],

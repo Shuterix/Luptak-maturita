@@ -1,103 +1,196 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, ComponentType } from 'react'
 import { useOnboarding } from '@/context/OnboardingContext'
-import { useAuth } from '@/context/AuthContext'
-import Step1 from './Step1'
-import Step2 from './Step2'
-import { ComponentType } from 'react'
+import { useLoading } from '@/context/LoadingContext'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import axios from 'axios'
+import { showAlertToast } from '@/components/toast/Toast'
+import { useRouter } from 'next/navigation'
 
-interface StepDefinition {
-	component: ComponentType<{ onDataChange: (data: Partial<User>) => void }>
-	title: string
-	subtitle?: string
-}
+import Step1 from './Step1'
+import Step2 from './Step2'
+import StepTrainerChoice from './StepTrainerChoice'
+import StepCreateClub from './StepCreateClub'
 
 export interface User {
 	_id: string
 	onboardingStep?: number
 	clubCode?: string
-	role?: 'student' | 'trainer'
+	role?: 'student' | 'trainer' | 'admin'
+	createNewClub?: boolean | null
+	clubName?: string
+	clubDescription?: string
 }
 
-const steps: StepDefinition[] = [
+interface StepDefinition {
+	key: string
+	component: ComponentType<{
+		onDataChange: (data: Partial<User>) => void
+		onValidityChange: (isValid: boolean) => void
+		userData: Partial<User>
+	}>
+	title: string
+	subtitle?: string
+	condition?: (user: Partial<User>) => boolean
+}
+
+const stepDefinitions: StepDefinition[] = [
 	{
+		key: 'role',
 		component: Step1,
 		title: 'Welcome to Ballroom!',
-		subtitle:
-			'Let’s get started by walking you through some quick setup steps.',
+		subtitle: 'Choose your role to get started.',
 	},
 	{
+		key: 'studentJoin',
 		component: Step2,
 		title: 'Your Club Code',
-		subtitle:
-			'Enter the code provided by your club to connect your profile.',
+		subtitle: 'Enter the code provided by your club.',
+		condition: (user) => user.role === 'student',
+	},
+	{
+		key: 'trainerChoice',
+		title: 'Club Setup',
+		subtitle: 'Do you want to create a new club or join an existing one?',
+		component: StepTrainerChoice,
+		condition: (user) => user.role === 'trainer',
+	},
+	{
+		key: 'trainerCreate',
+		title: 'Create Your Club',
+		subtitle: 'Set up your new club details.',
+		component: StepCreateClub,
+		condition: (user) => user.role === 'trainer' && user.createNewClub === true,
+	},
+	{
+		key: 'trainerJoin',
+		title: 'Join a Club',
+		component: Step2,
+		condition: (user) =>
+			user.role === 'trainer' && (user.createNewClub === false || user.createNewClub === null),
 	},
 ]
 
 export default function OnboardingSteps() {
-	const { step, setStep, initialized } = useOnboarding()
-	const { user } = useAuth() as { user: User | null }
+	const { step, setStep, initialized, userData } = useOnboarding()
+	const { isLoading, showLoader, hideLoader } = useLoading()
+	const router = useRouter()
 
-	const [updatedUserData, setUpdatedUserData] = useState<Partial<User>>({})
+	const [canRender, setCanRender] = useState(false)
+	const [isStepValid, setIsStepValid] = useState(false)
+	const [newUserData, setNewUserData] = useState<Partial<User>>({})
+	const [filterUserData, setFilterUserData] = useState<Partial<User>>({})
 
 	useEffect(() => {
-		if (
-			initialized &&
-			user?.onboardingStep !== undefined &&
-			typeof user.onboardingStep === 'number'
-		) {
-			if (
-				user.onboardingStep >= 0 &&
-				user.onboardingStep < steps.length &&
-				user.onboardingStep !== step
-			) {
-				setStep(user.onboardingStep)
-			}
-			setUpdatedUserData(user)
+		if (initialized && userData) {
+			const updated = { ...userData, createNewClub: null }
+			setNewUserData(updated)
+			setFilterUserData(updated)
+			setTimeout(() => setCanRender(true), 100)
 		}
-	}, [initialized, user, setStep, step])
+	}, [initialized, userData])
 
-	if (!initialized) return null
+	if (!canRender || isLoading) {
+		return (
+			<div className="min-h-screen flex items-center justify-center">
+				<span className="loading loading-spinner text-primary"></span>
+			</div>
+		)
+	}
 
-	const totalSteps = steps.length
+	const filteredSteps = stepDefinitions.filter(
+		(def) => def.key === 'role' || !def.condition || def.condition(filterUserData)
+	)
+
+	const progressBarSteps = stepDefinitions.filter(
+		(def) => def.key === 'role' || !def.condition || def.condition(newUserData)
+	)
+
+	const totalSteps = progressBarSteps.length
+	const currentStep = filteredSteps[step]
+	if (!currentStep) return null
+
+	const StepComponent = currentStep.component
 	const progress = ((step + 1) / totalSteps) * 100
-	const StepComponent = steps[step].component
-	const { title, subtitle } = steps[step]
 
 	const handleStepDataChange = (data: Partial<User>) => {
-		setUpdatedUserData((prev) => {
-			const merged = {
-				...prev,
-				...data,
-				onboardingStep: step,
-			}
-			return merged
+		setNewUserData({
+			...newUserData,
+			...data,
+			onboardingStep: step,
 		})
 	}
 
 	const next = () => {
-		setStep((s) => Math.min(s + 1, totalSteps - 1))
+		setFilterUserData(newUserData)
+		const currentFilteredSteps = stepDefinitions.filter(
+			(def) => def.key === 'role' || !def.condition || def.condition(filterUserData)
+		)
+		setStep((s) => Math.min(s + 1, currentFilteredSteps.length - 1))
 	}
 
-	const back = () => {
-		setStep((s) => Math.max(s - 1, 0))
+	const back = () => setStep((s) => Math.max(s - 1, 0))
+
+	const isActualFinalStep = () => {
+		if (newUserData.role === 'student') return currentStep.key === 'studentJoin'
+		if (newUserData.role === 'trainer') {
+			if (newUserData.createNewClub === true) return currentStep.key === 'trainerCreate'
+			if (newUserData.createNewClub === false || newUserData.createNewClub === null)
+				return currentStep.key === 'trainerJoin'
+			return false
+		}
+		return step === totalSteps - 1
 	}
 
 	const finish = async () => {
 		try {
-			await axios.patch('/api/users/update-onboarding', updatedUserData)
-			// Redirect or show confirmation if needed
+			showLoader()
+			await axios.patch('/api/users/update-onboarding', {
+				userId: userData._id,
+				onboardingStep: step,
+				role: newUserData.role,
+			})
+
+			if (newUserData.role === 'student' && newUserData.clubCode) {
+				await axios.post('/api/clubs/join', {
+					clubCode: newUserData.clubCode,
+					userId: userData._id,
+				})
+			} else if (newUserData.role === 'trainer') {
+				if (newUserData.createNewClub) {
+					await axios.post('/api/clubs/create', {
+						userId: userData._id,
+						clubName: newUserData.clubName || 'My Club',
+						description: newUserData.clubDescription,
+					})
+				} else if (newUserData.clubCode) {
+					await axios.post('/api/clubs/join', {
+						clubCode: newUserData.clubCode,
+						userId: userData._id,
+					})
+				}
+			}
+
+			showAlertToast('Onboarding completed!', {
+				variant: 'success',
+				title: 'Success',
+			})
+			router.push('/dashboard')
 		} catch (error) {
-			console.error('Failed to update onboarding data', error)
+			console.error('Failed to finish onboarding', error)
+			showAlertToast('Something went wrong. Try again.', {
+				variant: 'error',
+				title: 'Error',
+			})
+		} finally {
+			hideLoader()
 		}
 	}
 
 	return (
 		<div className="min-h-screen bg-base-200 flex items-center justify-center px-4 sm:px-6">
-			<div className="w-full max-w-screen-sm md:max-w-xl px-4 sm:px-8 py-10 rounded-2xl bg-base-100 shadow-xl">
+			<div className="w-full max-w-screen-sm md:max-w-xl sm:p-8 p-6 rounded-2xl bg-base-100 shadow-xl">
 				<div className="mb-6">
 					<div className="text-sm font-semibold mb-3 text-primary">
 						Step {step + 1} of {totalSteps}
@@ -109,13 +202,17 @@ export default function OnboardingSteps() {
 					/>
 				</div>
 
-				<h2 className="text-3xl font-extrabold mb-3">{title}</h2>
-				{subtitle && (
-					<p className="text-base text-base-content/70 mb-8">{subtitle}</p>
+				<h2 className="text-3xl font-extrabold mb-3">{currentStep.title}</h2>
+				{currentStep.subtitle && (
+					<p className="text-base text-base-content/70 mb-8">{currentStep.subtitle}</p>
 				)}
 
 				<div className="mb-8">
-					<StepComponent onDataChange={handleStepDataChange} />
+					<StepComponent
+						onDataChange={handleStepDataChange}
+						onValidityChange={setIsStepValid}
+						userData={newUserData}
+					/>
 				</div>
 
 				<div className="flex flex-col sm:flex-row gap-4">
@@ -123,18 +220,16 @@ export default function OnboardingSteps() {
 						<button
 							onClick={back}
 							className="btn btn-outline flex items-center justify-center gap-2 w-full sm:w-28"
-							aria-label="Go Back"
 						>
-							<ChevronLeft size={20} />
-							Back
+							<ChevronLeft size={20} /> Back
 						</button>
 					)}
 
-					{step === totalSteps - 1 ? (
+					{isActualFinalStep() ? (
 						<button
 							onClick={finish}
-							className="btn btn-primary w-full"
-							aria-label="Finish onboarding"
+							className="btn btn-primary w-full sm:flex-1"
+							disabled={!isStepValid}
 						>
 							Finish
 						</button>
@@ -142,10 +237,9 @@ export default function OnboardingSteps() {
 						<button
 							onClick={next}
 							className="btn btn-primary flex items-center justify-center gap-2 w-full sm:w-32"
-							aria-label="Continue to next step"
+							disabled={!isStepValid}
 						>
-							Continue
-							<ChevronRight size={20} />
+							Continue <ChevronRight size={20} />
 						</button>
 					)}
 				</div>

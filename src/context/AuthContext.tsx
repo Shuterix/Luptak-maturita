@@ -1,21 +1,24 @@
 'use client'
 
-import {
-	createContext,
-	useContext,
-	useState,
-	ReactNode,
-	useEffect,
-} from 'react'
-import { useRouter } from 'next/navigation'
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import axios from 'axios'
-import { isAxiosError } from 'axios'
+import { useRouter } from 'next/navigation'
 import { showAlertToast } from '@/components/toast/Toast'
 
+interface User {
+	_id: string
+	firstName?: string
+	lastName?: string
+	email?: string
+	role?: 'student' | 'trainer' | 'admin'
+	onboardingStep?: number
+}
+
 interface AuthContextType {
-	user: object | null
+	user: User | null
 	login: (email: string, password: string) => Promise<void>
 	logout: () => Promise<void>
+	refreshUser: () => Promise<void>
 	isLoading: boolean
 	error: string | null
 }
@@ -23,14 +26,28 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-	const [user, setUser] = useState<object | null>(null)
-	const [isLoading, setIsLoading] = useState<boolean>(false)
+	const [user, setUser] = useState<User | null>(null)
+	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const router = useRouter()
 
+	const refreshUser = async () => {
+		try {
+			const { data } = await axios.get('/api/users/me')
+			setUser(data.user)
+			localStorage.setItem('task-manager-v1_USER', JSON.stringify(data.user))
+		} catch (err) {
+			console.error('Failed to fetch user', err)
+			setUser(null)
+			localStorage.removeItem('task-manager-v1_USER')
+		}
+	}
+
 	useEffect(() => {
 		const storedUser = localStorage.getItem('task-manager-v1_USER')
-		if (storedUser) setUser(JSON.parse(storedUser))
+		if (storedUser && storedUser !== 'undefined') {
+			refreshUser()
+		}
 	}, [])
 
 	const login = async (email: string, password: string) => {
@@ -38,37 +55,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 		setError(null)
 
 		try {
-			const { data } = await axios.post('/api/auth/login', {
-				email,
-				password,
-			})
+			const { data } = await axios.post('/api/auth/login', { email, password })
 
-			setUser(data.user)
+			if (data.status === 'success' && data.user) {
+				setUser(data.user)
+				localStorage.setItem('task-manager-v1_USER', JSON.stringify(data.user))
+				showAlertToast('Login successful!', { variant: 'success', title: 'Success' })
 
-			localStorage.setItem(
-				'task-manager-v1_USER',
-				JSON.stringify(data.user),
-			)
-
-			if (data.user.onboardingStep === 4) router.push('/dashboard')
-			else router.push('/onboarding')
-
-			showAlertToast('Login successful!', {
-				variant: 'success',
-				title: 'Success',
-			})
-		} catch (error) {
-			let errorMessage = 'An unexpected error occurred'
-
-			if (isAxiosError(error) && error.response) {
-				errorMessage = error.response.data.message || errorMessage
+				if (data.user.onboardingStep === 4) {
+					router.push('/dashboard')
+				} else {
+					router.push('/onboarding')
+				}
 			}
-
-			setError(errorMessage)
-			showAlertToast(errorMessage, {
-				variant: 'error',
-				title: 'Login Failed',
-			})
+		} catch (err: any) {
+			const message = err.response?.data?.message || 'Unexpected login error'
+			setError(message)
+			showAlertToast(message, { variant: 'error', title: 'Login Failed' })
 		} finally {
 			setIsLoading(false)
 		}
@@ -78,25 +81,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 		try {
 			await axios.get('/api/auth/logout')
 			setUser(null)
-			router.push('/auth/login')
-			setUser(null)
 			localStorage.removeItem('task-manager-v1_USER')
-			showAlertToast('Logged out successfully', {
-				variant: 'success',
-				title: 'Success',
-			})
-		} catch (error) {
-			console.error(error)
-
-			showAlertToast('Logout failed', {
-				variant: 'error',
-				title: 'Error',
-			})
+			router.push('/auth/login')
+			showAlertToast('Logged out successfully', { variant: 'success', title: 'Success' })
+		} catch (err) {
+			console.error(err)
+			showAlertToast('Logout failed', { variant: 'error', title: 'Error' })
 		}
 	}
 
 	return (
-		<AuthContext.Provider value={{ user, login, logout, isLoading, error }}>
+		<AuthContext.Provider value={{ user, login, logout, refreshUser, isLoading, error }}>
 			{children}
 		</AuthContext.Provider>
 	)
