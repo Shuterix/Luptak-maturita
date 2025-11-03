@@ -32,9 +32,14 @@ const afterSuccessfullLogin = (user: IUser) => {
 		user: userWithoutPassword,
 	}
 
+	const jwtSecret = process.env.JWT_SECRET
+	if (!jwtSecret) {
+		throw new Error('Missing JWT_SECRET. Add it to aplikacia/.env.local')
+	}
+
 	const token = jwt.sign(
 		{ userId: user._id, email: user.email },
-		process.env.JWT_SECRET as string,
+		jwtSecret,
 		{ expiresIn: '7d' },
 	)
 
