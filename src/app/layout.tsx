@@ -3,8 +3,8 @@ import { AppProviders } from '@/context/Providers'
 import { Toaster } from 'sonner'
 
 export const metadata = {
-	title: 'Project V1',
-	description: 'React testing project v1.',
+	title: 'DanceHub',
+	description: 'Comprehensive dance studio management system.',
 }
 
 export default function RootLayout({

@@ -39,7 +39,7 @@ const stepDefinitions: StepDefinition[] = [
 	{
 		key: 'role',
 		component: Step1,
-		title: 'Welcome to Ballroom!',
+		title: 'Welcome to DanceHub!',
 		subtitle: 'Choose your role to get started.',
 	},
 	{

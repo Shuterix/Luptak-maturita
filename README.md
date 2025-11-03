@@ -1,4 +1,6 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DanceHub
+
+DanceHub is a comprehensive dance studio management system built with [Next.js](https://nextjs.org). It provides tools for managing dance classes, instructors, students, schedules, and studio operations.
 
 ## Getting Started
 

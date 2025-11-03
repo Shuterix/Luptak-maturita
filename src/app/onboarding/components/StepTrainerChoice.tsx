@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { User } from './OnboardingSteps'
-import { create } from 'domain'
 
 interface StepTrainerChoiceProps {
 	onDataChange?: (data: Partial<User>) => void

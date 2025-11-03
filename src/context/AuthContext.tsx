@@ -35,16 +35,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 		try {
 			const { data } = await axios.get('/api/users/me')
 			setUser(data.user)
-			localStorage.setItem('task-manager-v1_USER', JSON.stringify(data.user))
+			localStorage.setItem('dancehub_USER', JSON.stringify(data.user))
 		} catch (err) {
 			console.error('Failed to fetch user', err)
 			setUser(null)
-			localStorage.removeItem('task-manager-v1_USER')
+			localStorage.removeItem('dancehub_USER')
 		}
 	}
 
 	useEffect(() => {
-		const storedUser = localStorage.getItem('task-manager-v1_USER')
+		const storedUser = localStorage.getItem('dancehub_USER')
 		if (storedUser && storedUser !== 'undefined') {
 			refreshUser()
 		}
@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 			if (data.status === 'success' && data.user) {
 				setUser(data.user)
-				localStorage.setItem('task-manager-v1_USER', JSON.stringify(data.user))
+				localStorage.setItem('dancehub_USER', JSON.stringify(data.user))
 				showAlertToast('Login successful!', { variant: 'success', title: 'Success' })
 
 				if (data.user.onboardingStep === 4) {
@@ -81,7 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 		try {
 			await axios.get('/api/auth/logout')
 			setUser(null)
-			localStorage.removeItem('task-manager-v1_USER')
+			localStorage.removeItem('dancehub_USER')
 			router.push('/auth/login')
 			showAlertToast('Logged out successfully', { variant: 'success', title: 'Success' })
 		} catch (err) {

@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager V1 - Functional Specification</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #bdc3c7;
+            padding-bottom: 5px;
+            margin-top: 30px;
+        }
+        h3 {
+            color: #7f8c8d; 
+            margin-top: 25px;
+        }
+        .document-info {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-left: 4px solid #3498db;
+            margin-bottom: 30px;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border: 1px solid #dee2e6;
+            margin-bottom: 30px;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .toc li {
+            margin: 5px 0;
+        }
+        .toc a {
+            text-decoration: none;
+            color: #007bff;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #dee2e6;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #dee2e6;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+        }
+        .feature-list {
+            background-color: #d4edda;
+            padding: 15px;
+            border-left: 4px solid #28a745;
+            margin: 20px 0;
+        }
+        .technical-spec {
+            background-color: #d1ecf1;
+            padding: 15px;
+            border-left: 4px solid #17a2b8;
+            margin: 20px 0;
+        }
+        .page-break {
+            page-break-before: always;
+        }
+    </style>
+</head>
+<body>
+    <div class="document-info">
+        <h1>Task Manager V1 - Functional Specification</h1>
+        <p><strong>Project Name:</strong> Task Manager V1 (Ballroom Dance Club Management System)</p>
+        <p><strong>Version:</strong> 1.0</p>
+        <p><strong>Date:</strong> January 2025</p>
+        <p><strong>Document Type:</strong> Functional Specification</p>
+        <p><strong>Technology Stack:</strong> Next.js 15, React 19, TypeScript, MongoDB, Tailwind CSS, DaisyUI</p>
+    </div>
+
+    <div class="toc">
+        <h2>Table of Contents</h2>
+        <ul>
+            <li><a href="#executive-summary">1. Executive Summary</a></li>
+            <li><a href="#project-overview">2. Project Overview</a></li>
+            <li><a href="#system-architecture">3. System Architecture</a></li>
+            <li><a href="#user-roles">4. User Roles and Permissions</a></li>
+            <li><a href="#core-features">5. Core Features</a></li>
+            <li><a href="#ui-specifications">6. User Interface Specifications</a></li>
+            <li><a href="#api-specifications">7. API Specifications</a></li>
+            <li><a href="#database-schema">8. Database Schema</a></li>
+            <li><a href="#security-requirements">9. Security Requirements</a></li>
+            <li><a href="#performance-requirements">10. Performance Requirements</a></li>
+            <li><a href="#technical-requirements">11. Technical Requirements</a></li>
+            <li><a href="#future-enhancements">12. Future Enhancements</a></li>
+        </ul>
+    </div>
+
+    <section id="executive-summary">
+        <h2>1. Executive Summary</h2>
+        <p>Task Manager V1 is a comprehensive ballroom dance club management system designed to streamline operations for dance studios, clubs, and training centers. The system provides role-based access for students, trainers, and administrators, with advanced timetable scheduling capabilities, club management, and user onboarding workflows.</p>
+        
+        <div class="highlight">
+            <h3>Key Benefits</h3>
+            <ul>
+                <li><strong>Automated Scheduling:</strong> Intelligent timetable generation with conflict resolution</li>
+                <li><strong>Multi-Role Support:</strong> Student, trainer, and admin user types with appropriate permissions</li>
+                <li><strong>Club Management:</strong> Create and manage dance clubs with unique codes</li>
+                <li><strong>User Onboarding:</strong> Guided setup process for new users</li>
+                <li><strong>Real-time Validation:</strong> Comprehensive validation for scheduling conflicts and constraints</li>
+            </ul>
+        </div>
+    </section>
+
+    <section id="project-overview">
+        <h2>2. Project Overview</h2>
+        
+        <h3>Purpose</h3>
+        <p>The system serves as a centralized platform for managing ballroom dance clubs, including:</p>
+        <ul>
+            <li>User registration and role assignment</li>
+            <li>Club creation and management</li>
+            <li>Advanced timetable scheduling with AI-powered optimization</li>
+            <li>Student-trainer pairing and lesson management</li>
+            <li>Weekly schedule management for recurring programs</li>
+        </ul>
+
+        <h3>Target Users</h3>
+        <ul>
+            <li><strong>Students:</strong> Dance students who need to book lessons and view schedules</li>
+            <li><strong>Trainers:</strong> Dance instructors who manage their schedules and students</li>
+            <li><strong>Administrators:</strong> Club managers who oversee operations and user management</li>
+        </ul>
+
+        <h3>Business Objectives</h3>
+        <ul>
+            <li>Reduce administrative overhead for dance clubs</li>
+            <li>Improve scheduling efficiency and reduce conflicts</li>
+            <li>Provide better user experience for students and trainers</li>
+            <li>Enable scalable club management</li>
+        </ul>
+    </section>
+
+    <section id="system-architecture">
+        <h2>3. System Architecture</h2>
+        
+        <h3>Technology Stack</h3>
+        <ul>
+            <li><strong>Frontend:</strong> Next.js 15 with React 19, TypeScript</li>
+            <li><strong>Styling:</strong> Tailwind CSS with DaisyUI components</li>
+            <li><strong>Backend:</strong> Next.js API routes with MongoDB</li>
+            <li><strong>Database:</strong> MongoDB with Mongoose ODM</li>
+            <li><strong>Authentication:</strong> JWT-based authentication with bcrypt password hashing</li>
+            <li><strong>UI Components:</strong> Lucide React icons, Framer Motion animations</li>
+            <li><strong>Forms:</strong> React Hook Form for form management</li>
+            <li><strong>Notifications:</strong> Sonner for toast notifications</li>
+        </ul>
+
+        <h3>System Components</h3>
+        <ol>
+            <li><strong>Authentication System:</strong> JWT-based with role management</li>
+            <li><strong>User Management:</strong> Multi-role user system with onboarding</li>
+            <li><strong>Club Management:</strong> Club creation, joining, and administration</li>
+            <li><strong>Timetable Engine:</strong> Advanced scheduling algorithm with conflict resolution</li>
+            <li><strong>Dashboard Interface:</strong> Role-based dashboard with navigation</li>
+            <li><strong>API Layer:</strong> RESTful API endpoints for all operations</li>
+        </ol>
+    </section>
+
+    <section id="user-roles">
+        <h2>4. User Roles and Permissions</h2>
+        
+        <h3>Student Role</h3>
+        <div class="feature-list">
+            <p><strong>Permissions:</strong></p>
+            <ul>
+                <li>View personal schedule and lessons</li>
+                <li>Join clubs using club codes</li>
+                <li>View available trainers and lessons</li>
+                <li>Update personal profile information</li>
+            </ul>
+            <p><strong>Restrictions:</strong></p>
+            <ul>
+                <li>Cannot create clubs</li>
+                <li>Cannot manage other users</li>
+                <li>Cannot access admin functions</li>
+            </ul>
+        </div>
+
+        <h3>Trainer Role</h3>
+        <div class="feature-list">
+            <p><strong>Permissions:</strong></p>
+            <ul>
+                <li>Create new clubs or join existing ones</li>
+                <li>Manage student schedules</li>
+                <li>View and edit timetable</li>
+                <li>Access student management tools</li>
+                <li>Update personal and club information</li>
+            </ul>
+            <p><strong>Restrictions:</strong></p>
+            <ul>
+                <li>Cannot access system-wide admin functions</li>
+                <li>Limited to their own club(s)</li>
+            </ul>
+        </div>
+
+        <h3>Admin Role</h3>
+        <div class="feature-list">
+            <p><strong>Permissions:</strong></p>
+            <ul>
+                <li>Full system access</li>
+                <li>User management across all clubs</li>
+                <li>System configuration</li>
+                <li>Analytics and reporting</li>
+                <li>Club oversight and management</li>
+            </ul>
+        </div>
+    </section>
+
+    <section id="core-features">
+        <h2>5. Core Features</h2>
+        
+        <h3>5.1 Authentication and User Management</h3>
+        
+        <h4>User Registration</h4>
+        <ul>
+            <li><strong>Email-based registration</strong> with validation</li>
+            <li><strong>Password requirements:</strong> Secure password hashing with bcrypt</li>
+            <li><strong>Role selection:</strong> Student, Trainer, or Admin during registration</li>
+            <li><strong>Email uniqueness:</strong> Prevents duplicate accounts</li>
+        </ul>
+
+        <h4>User Login</h4>
+        <ul>
+            <li><strong>JWT token authentication</strong> with secure cookie storage</li>
+            <li><strong>Session management</strong> with automatic token refresh</li>
+            <li><strong>Role-based redirection</strong> after login</li>
+            <li><strong>Onboarding flow</strong> for new users</li>
+        </ul>
+
+        <h4>User Profile Management</h4>
+        <ul>
+            <li><strong>Personal information:</strong> First name, last name, email, phone</li>
+            <li><strong>Club association:</strong> Link users to specific clubs</li>
+            <li><strong>Partner pairing:</strong> Link students with dance partners</li>
+            <li><strong>Onboarding tracking:</strong> Track user setup progress</li>
+        </ul>
+
+        <h3>5.2 Club Management System</h3>
+        
+        <h4>Club Creation</h4>
+        <ul>
+            <li><strong>Unique club codes</strong> for easy joining</li>
+            <li><strong>Club information:</strong> Name, description, logo</li>
+            <li><strong>Pricing structure:</strong> Individual and group lesson pricing</li>
+            <li><strong>Trainer assignment:</strong> Assign trainers to clubs</li>
+            <li><strong>Student management:</strong> Add and manage club students</li>
+        </ul>
+
+        <h4>Club Joining</h4>
+        <ul>
+            <li><strong>Club code system:</strong> Students join using unique codes</li>
+            <li><strong>Automatic association:</strong> Link users to clubs upon joining</li>
+            <li><strong>Validation:</strong> Verify club codes exist and are active</li>
+        </ul>
+
+        <h3>5.3 Advanced Timetable System</h3>
+        
+        <div class="technical-spec">
+            <h4>Timetable Generation Algorithm</h4>
+            <p>The system includes a sophisticated scheduling algorithm with the following features:</p>
+            
+            <h5>Core Algorithm Features:</h5>
+            <ul>
+                <li><strong>Multi-day scheduling</strong> with configurable date ranges</li>
+                <li><strong>Teacher-student matching</strong> with availability constraints</li>
+                <li><strong>Break management</strong> with consecutive lesson limits</li>
+                <li><strong>Room assignment</strong> with conflict prevention</li>
+                <li><strong>Priority-based scheduling</strong> for student preferences</li>
+            </ul>
+
+            <h5>Scheduling Constraints:</h5>
+            <ul>
+                <li><strong>Teacher availability:</strong> Respect teacher working hours and unavailable dates</li>
+                <li><strong>Student availability:</strong> Match student schedules and preferences</li>
+                <li><strong>Consecutive lesson limits:</strong> Automatic breaks after specified lesson counts</li>
+                <li><strong>Room conflicts:</strong> Prevent double-booking of facilities</li>
+                <li><strong>Time slot validation:</strong> Ensure lessons fit within available time windows</li>
+            </ul>
+
+            <h5>Break Management:</h5>
+            <ul>
+                <li><strong>Default breaks:</strong> Configurable break periods (e.g., lunch, rest periods)</li>
+                <li><strong>Consecutive breaks:</strong> Automatic breaks after maximum consecutive lessons</li>
+                <li><strong>Teacher-specific breaks:</strong> Individual teacher rest requirements</li>
+                <li><strong>Student-specific breaks:</strong> Student rest period management</li>
+            </ul>
+
+            <h4>Student View and Teacher Ownership</h4>
+            <ul>
+                <li><strong>Student visibility:</strong> Students can view timetables created by their teacher(s), filtered by timetable name and type (e.g., weekly, yearly, after-school, camp).</li>
+                <li><strong>Named timetables:</strong> Each timetable has a <em>name</em>, <em>type</em>, and <em>date range</em> (e.g., "After-School 2025 Wk 12", "Summer Camp Week 2").</li>
+                <li><strong>Lesson details:</strong> Students see lesson type (group/individual/couple), assigned teacher, room, start/end, and any notes.</li>
+            </ul>
+
+            <h4>Timetable Types</h4>
+            <ul>
+                <li><strong>Weekly/Recurring:</strong> Templates that repeat weekly for seasons (e.g., after-school programs). Generated for one or more weeks with specified weekdays and times.</li>
+                <li><strong>Yearly/Seasonal:</strong> High-level yearly plan composed of multiple weekly templates and special events.</li>
+                <li><strong>After-School:</strong> Weekday afternoons/evenings, mixed group and individual lessons, typically constrained to post-school hours.</li>
+                <li><strong>Training Camps:</strong> Full-week or multi-day intensive schedules from morning to evening, higher density, different break rules.</li>
+                <li><strong>Custom Events:</strong> Arbitrary date ranges and rules defined by the teacher (competitions, showcases, workshops).</li>
+            </ul>
+
+            <h4>Lesson Types and Pairing Logic</h4>
+            <ul>
+                <li><strong>Group lessons:</strong> Capacity-bound lessons with level/age constraints and optional prerequisites.</li>
+                <li><strong>Individual lessons:</strong> One student with one teacher; respects both parties' availability and room.</li>
+                <li><strong>Couple lessons:</strong> Exactly two students in a partnered pair. <em>Availability must intersect for both partners</em>; the algorithm only schedules at times within the overlap of both students' availability and the teacher's availability.</li>
+                <li><strong>Partner management:</strong> Students can set/update their partner; couples inherit pair-level preferences (e.g., preferred teacher, preferred days).</li>
+            </ul>
+
+            <h4>Availability and Rule Parameters</h4>
+            <ul>
+                <li><strong>Day start / day end:</strong> Global or per-day working window (e.g., 08:00–21:00; after-school 15:00–20:00).</li>
+                <li><strong>Default break:</strong> Configurable fixed breaks (e.g., lunch 12:00–13:00) applied per teacher or globally.</li>
+                <li><strong>Consecutive limit:</strong> Max consecutive lesson blocks before mandatory break (e.g., 4 lessons then 15-min break).</li>
+                <li><strong>Slot granularity:</strong> 5/10/15-minute grid for start times; lesson durations are multiples of the grid.</li>
+                <li><strong>Teacher availability:</strong> Working hours, away dates, and soft preferences.</li>
+                <li><strong>Student availability:</strong> Time windows per day; couples require intersection of both partners’ windows.</li>
+                <li><strong>Room constraints:</strong> Capacity, mirrors/floor requirements, and noise conflicts if modeled.</li>
+            </ul>
+
+            <h4>Hard vs Soft Constraints</h4>
+            <ul>
+                <li><strong>Hard constraints (must hold during generation):</strong> availability windows, room non-overlap, teacher non-overlap, couple overlap, within day start/end, lesson duration, and capacity.</li>
+                <li><strong>Soft constraints (optimize for):</strong> minimize gaps for teachers/students, avoid late endings, honor preferred teachers/levels, distribute individual vs group balance, keep couples’ lessons contiguous where possible.</li>
+            </ul>
+
+            <h4>Manual Overrides</h4>
+            <ul>
+                <li><strong>Drag and Drop Interface:</strong> Teachers can drag lessons around the timetable to swap, move, or rearrange them with intuitive visual feedback.</li>
+                <li><strong>Rule Enforcement Toggle:</strong> Checkbox option "Apply Rules" / "Strict Mode" controls validation behavior:
+                    <ul>
+                        <li><strong>Unchecked (Default):</strong> No rules applied - teachers can drag lessons anywhere, even if it creates conflicts or violates constraints.</li>
+                        <li><strong>Checked:</strong> Rules are enforced - drag operations are validated against availability, conflicts, and constraints before allowing placement.</li>
+                    </ul>
+                </li>
+                <li><strong>Visual Feedback:</strong> 
+                    <ul>
+                        <li>When rules are OFF: Teachers can drop lessons anywhere, conflicts shown as warnings but allowed.</li>
+                        <li>When rules are ON: Invalid drops are prevented or highlighted, only valid positions allowed.</li>
+                    </ul>
+                </li>
+                <li><strong>Conflict Indicators:</strong> Even in "no rules" mode, show visual warnings for conflicts (red outlines, warning icons) but don't block the action.</li>
+                <li><strong>Post-generation freedom:</strong> Teachers may drag/drop, resize, or swap lessons and breaks arbitrarily when rules are disabled.</li>
+                <li><strong>Locking:</strong> Teachers can lock specific lessons/blocks so re-generation will preserve them.</li>
+                <li><strong>Re-generate behavior:</strong> When running the algorithm again, the teacher can choose: keep manual edits (locked items only or all manual items) vs fully re-generate from rules.</li>
+                <li><strong>Audit trail:</strong> Optional history of manual edits for traceability and rollback.</li>
+            </ul>
+
+            <h4>Algorithm Flow (High-level)</h4>
+            <ol>
+                <li>Collect inputs: timetable type, date range, day start/end, default breaks, consecutive limits, teachers, rooms, students, pairings, and availabilities.</li>
+                <li>Preprocess: compute couple availability intersections; expand recurring rules; place fixed/locked events first.</li>
+                <li>Place high-priority lessons (e.g., exams, fixed groups), then individual/couple lessons using constraint satisfaction.</li>
+                <li>Insert mandatory breaks according to consecutive limits and default break windows.</li>
+                <li>Optimize soft objectives (gap reduction, balanced distribution) without breaking hard constraints.</li>
+                <li>Emit schedule with conflict annotations (should be none after generation unless forced by teacher options).</li>
+            </ol>
+
+            <h4>Lesson Quotas and Multi-day Distribution</h4>
+            <ul>
+                <li><strong>Requested lesson counts:</strong> Each student, couple, or group may specify a target number of lessons for the timetable period (e.g., 12 lessons during a 3-day camp).</li>
+                <li><strong>Distribution policy:</strong> Quotas are distributed across the entire timetable range (week/camp), not concentrated into a single day, subject to daily caps.</li>
+                <li><strong>Daily caps:</strong> Per-entity caps (e.g., max 4 lessons per student per day; max 6 lessons per teacher per day) prevent overloading.</li>
+                <li><strong>Even spread heuristic:</strong> The algorithm attempts an even-as-possible distribution by days, then adjusts within-day times respecting availability and breaks.</li>
+                <li><strong>Spillover handling:</strong> If a day reaches caps or lacks availability, remaining lessons spill to other days within the timetable window.</li>
+                <li><strong>Insufficient capacity reporting:</strong> If the total requested lessons cannot fit within the timetable under hard constraints, the algorithm outputs unmet counts with suggested remedies (extend date range, relax caps, add rooms/teachers).</li>
+                <li><strong>Couple quotas:</strong> Couple lesson requests respect the availability intersection of both partners and the assigned teacher across multiple days.</li>
+            </ul>
+
+            <div class="highlight">
+                <h5>Example: 3-Day Camp Quotas</h5>
+                <p>Two students each request <strong>12 individual lessons</strong> with one teacher across a <strong>3-day camp</strong>. The algorithm will:</p>
+                <ol>
+                    <li>Compute total required lessons: 24 individual lessons.</li>
+                    <li>Apply daily caps (e.g., student max 4/day, teacher max 8/day) and room constraints.</li>
+                    <li>Distribute ~8 lessons/day across the 3 days, assigning 4 per student per day if availability permits.</li>
+                    <li>If a day cannot host all 8 due to availability, spill remaining lessons to other camp days.</li>
+                    <li>If still infeasible, return unmet count with suggestions (extend to a 4th day, add a second teacher, increase day end time).</li>
+                </ol>
+            </div>
+
+            <h4>Edge Cases and Rules</h4>
+            <ul>
+                <li><strong>No overlap for couples:</strong> If a couple has no overlapping availability with the teacher within the date range, mark lesson as unschedulable and suggest nearest alternatives.</li>
+                <li><strong>Partial week holidays:</strong> Remove holiday windows from availability; ensure default breaks do not collide with closed days.</li>
+                <li><strong>Room scarcity:</strong> If rooms are insufficient, queue lower-priority lessons or extend to alternative time windows where allowed.</li>
+                <li><strong>Overbooked teacher:</strong> Cap lessons per day/week; push excess to alternative teachers based on preference mapping.</li>
+                <li><strong>After-school only:</strong> Enforce day start/end like 15:00–20:00 for after-school timetables.</li>
+                <li><strong>Camp density:</strong> Allow longer spans and different consecutive/break rules for camps.</li>
+                <li><strong>Manual invalid states:</strong> Manual moves may create overlaps; surface warnings but allow save.</li>
+                <li><strong>Time zone consistency:</strong> All times stored in UTC with club-local time zone for display.</li>
+                <li><strong>Duration mismatches:</strong> If a teacher changes default lesson duration mid-timetable, preserve already scheduled durations unless re-generated.</li>
+            </ul>
+        </div>
+
+        <h4>Timetable Configuration</h4>
+        <ul>
+            <li><strong>Lesson duration:</strong> Configurable lesson length (default 45 minutes)</li>
+            <li><strong>Break intervals:</strong> Set maximum consecutive lessons before breaks</li>
+            <li><strong>Day schedules:</strong> Custom start/end times for different days</li>
+            <li><strong>Room assignments:</strong> Assign lessons to specific studios/rooms</li>
+            <li><strong>Time slot management:</strong> Define available time slots</li>
+        </ul>
+
+        <h4>Validation and Optimization</h4>
+        <ul>
+            <li><strong>Conflict detection:</strong> Identify scheduling conflicts before generation</li>
+            <li><strong>Capacity analysis:</strong> Ensure teacher capacity meets student demand</li>
+            <li><strong>Availability overlap:</strong> Verify teacher-student availability matches</li>
+            <li><strong>Alternative suggestions:</strong> Propose alternative dates when conflicts occur</li>
+            <li><strong>Satisfaction scoring:</strong> Calculate how well the schedule meets requirements</li>
+        </ul>
+
+        <h3>5.4 Weekly Schedule Management</h3>
+        
+        <h4>Recurring Programs</h4>
+        <ul>
+            <li><strong>Season-based scheduling:</strong> Create programs for specific seasons</li>
+            <li><strong>Weekly lesson templates:</strong> Define recurring weekly schedules</li>
+            <li><strong>Student group management:</strong> Organize students into groups by level/age</li>
+            <li><strong>After-school programs:</strong> Special scheduling for after-school activities</li>
+        </ul>
+
+        <h4>Lesson Management</h4>
+        <ul>
+            <li><strong>Lesson types:</strong> Individual and group lessons</li>
+            <li><strong>Student capacity:</strong> Set maximum students per lesson</li>
+            <li><strong>Room assignments:</strong> Assign lessons to specific studios</li>
+            <li><strong>Time management:</strong> Define start/end times for lessons</li>
+            <li><strong>Description and metadata:</strong> Add lesson descriptions and requirements</li>
+        </ul>
+
+        <h3>5.5 User Interface and Experience</h3>
+        
+        <h4>Dashboard System</h4>
+        <ul>
+            <li><strong>Role-based navigation:</strong> Different interfaces for students, trainers, and admins</li>
+            <li><strong>Responsive design:</strong> Mobile-friendly interface with drawer navigation</li>
+            <li><strong>Real-time updates:</strong> Live data updates without page refresh</li>
+            <li><strong>Intuitive navigation:</strong> Clear menu structure with role-appropriate options</li>
+        </ul>
+
+        <h4>Onboarding Process</h4>
+        <ul>
+            <li><strong>Step-by-step setup:</strong> Guided user onboarding with progress tracking</li>
+            <li><strong>Role-specific flows:</strong> Different onboarding for students vs trainers</li>
+            <li><strong>Club setup:</strong> Streamlined club creation and joining process</li>
+            <li><strong>Validation and feedback:</strong> Real-time validation with helpful error messages</li>
+        </ul>
+
+        <h3>5.6 Lesson Cancellation and Rescheduling</h3>
+        <ul>
+            <li><strong>Lesson states:</strong> scheduled | cancelled | completed | no_show | rescheduled</li>
+            <li><strong>Cancellation window:</strong> Configurable policy (e.g., min hours before start) per club; enforced when cancelling.</li>
+            <li><strong>Reschedule flow:</strong> Cancel + create replacement lesson in any valid slot; retains references to original lesson.</li>
+            <li><strong>Audit:</strong> Capture who cancelled, when, and reason (student, teacher, admin).</li>
+            <li><strong>Notifications:</strong> Automatic notifications to affected parties on cancellation/reschedule (see Notifications).</li>
+            <li><strong>Attendance impact:</strong> No-shows can be marked and handled separately from cancellations.</li>
+        </ul>
+
+        <h3>5.7 Notification System</h3>
+        <ul>
+            <li><strong>Channels:</strong> Email (required), optional SMS/push (future).</li>
+            <li><strong>Templates:</strong> Branded templates for lesson reminders, changes, cancellations, new timetable published.</li>
+            <li><strong>Triggers:</strong> Lesson creation/update/cancel, timetable publish, attendance marked, onboarding steps.</li>
+            <li><strong>Reminder cadence:</strong> Configurable reminders (e.g., 24h and 2h before lesson).</li>
+            <li><strong>Quiet hours:</strong> Do-not-disturb windows; non-urgent notifications queued.</li>
+            <li><strong>User preferences:</strong> Per-user opt-in/out per template where appropriate.</li>
+        </ul>
+
+        <h3>5.8 Attendance Tracking</h3>
+        <ul>
+            <li><strong>Mark attendance:</strong> Teacher marks present/absent per lesson; optional reasons (sick, travel).</li>
+            <li><strong>Makeup tracking:</strong> Mark absent-with-makeup eligibility; tie to future rescheduled lesson.</li>
+            <li><strong>Timestamps:</strong> Record who marked attendance and when.</li>
+            <li><strong>Reporting:</strong> Attendance rates per student, group, teacher, and timetable.</li>
+        </ul>
+
+        <h3>5.9 Teacher Workload Balancing</h3>
+        <ul>
+            <li><strong>Preferences per teacher:</strong> Daily max lessons, preferred working hours, preferred lesson types (group/individual/couple), preferred days.</li>
+            <li><strong>Soft optimization:</strong> Algorithm balances assignments according to teacher preferences without violating hard constraints.</li>
+            <li><strong>Overrides:</strong> Teachers/admins may override distribution manually; preferences guide re-generation.</li>
+        </ul>
+
+        <h3>5.10 Reporting and Analytics</h3>
+        <ul>
+            <li><strong>Utilization:</strong> Teacher utilization (scheduled time vs available), room usage, timetable density.</li>
+            <li><strong>Attendance analytics:</strong> Attendance rates, no-shows, cancellation patterns.</li>
+            <li><strong>Schedule health:</strong> Gaps, unused time totals, free slot conversion rates.</li>
+            <li><strong>Exports:</strong> CSV/JSON exports for lessons, attendance, and timetables.</li>
+        </ul>
+    </section>
+
+    <section id="ui-specifications">
+        <h2>6. User Interface Specifications</h2>
+        
+        <h3>Navigation Structure</h3>
+        <pre>
+Dashboard
+├── Dashboard (Home)
+├── Users Management
+├── Profile
+├── Help & Support
+├── Settings
+└── Logout
+        </pre>
+
+        <h3>Key Pages and Components</h3>
+        
+        <h4>Authentication Pages</h4>
+        <ul>
+            <li><strong>Login Page:</strong> Email/password authentication with validation</li>
+            <li><strong>Registration Page:</strong> User registration with role selection</li>
+            <li><strong>Password Recovery:</strong> (Future enhancement)</li>
+        </ul>
+
+        <h4>Dashboard Pages</h4>
+        <ul>
+            <li><strong>Main Dashboard:</strong> Role-based overview with key metrics</li>
+            <li><strong>Users Page:</strong> User management interface (admin/trainer)</li>
+            <li><strong>Profile Page:</strong> Personal information management</li>
+        </ul>
+
+        <h4>Onboarding Pages</h4>
+        <ul>
+            <li><strong>Step 1:</strong> Role selection (Student/Trainer)</li>
+            <li><strong>Step 2:</strong> Club joining (for students) or club setup</li>
+            <li><strong>Step 3:</strong> Club creation (for trainers creating new clubs)</li>
+            <li><strong>Step 4:</strong> Final setup and completion</li>
+        </ul>
+
+        <h4>Timetable Interface</h4>
+        <ul>
+            <li><strong>Timetable Generator:</strong> Main scheduling interface with drag-and-drop functionality</li>
+            <li><strong>Teacher Management:</strong> Add/edit teacher information</li>
+            <li><strong>Student Management:</strong> Add/edit student information</li>
+            <li><strong>Schedule Configuration:</strong> Set up scheduling parameters</li>
+            <li><strong>Timetable Display:</strong> Visual timetable with lesson details and time-based scaling</li>
+            <li><strong>Rule Enforcement Toggle:</strong> "Apply Rules" checkbox to control drag-and-drop validation</li>
+        </ul>
+
+        <h4>Timetable Visual Requirements</h4>
+        <ul>
+            <li><strong>Proportional Row Heights:</strong> Timetable rows scale proportionally to time duration (45-minute lesson appears taller than 15-minute break)</li>
+            <li><strong>Unused Time Display:</strong> Gaps too small for lessons show as "Unused: X min" with exact minute count</li>
+            <li><strong>Free Slot Display:</strong> Larger gaps that could fit lessons show as "Free slot"</li>
+            <li><strong>Visual Distinction:</strong> Clear differentiation between:
+                <ul>
+                    <li>Scheduled lessons (proportional height, colored by type)</li>
+                    <li>Breaks (proportional height, distinct styling)</li>
+                    <li>Free slots (available for lessons)</li>
+                    <li>Unused time (insufficient for lessons, with minute count)</li>
+                </ul>
+            </li>
+            <li><strong>Drag and Drop Visual Feedback:</strong> 
+                <ul>
+                    <li>Hover states during drag operations</li>
+                    <li>Valid drop zones highlighted when rules are enabled</li>
+                    <li>Conflict warnings (red outlines, warning icons) when rules are disabled</li>
+                </ul>
+            </li>
+            <li><strong>Mobile Responsiveness:</strong> Responsive layout for phones and tablets; touch-friendly drag-and-drop, larger hit targets, sticky time-axis, and horizontal/vertical scroll with inertia.</li>
+        </ul>
+
+        <h3>Component Library</h3>
+        <ul>
+            <li><strong>Button Components:</strong> Consistent button styling with variants</li>
+            <li><strong>Input Components:</strong> Form inputs with validation</li>
+            <li><strong>Alert Components:</strong> User feedback and notifications</li>
+            <li><strong>Toast Notifications:</strong> Real-time user feedback</li>
+            <li><strong>Loading Components:</strong> Progress indicators and spinners</li>
+            <li><strong>Modal Components:</strong> Dialog boxes for confirmations and forms</li>
+        </ul>
+    </section>
+
+    <section id="api-specifications">
+        <h2>7. API Specifications</h2>
+        
+        <h3>Authentication Endpoints</h3>
+        <pre>
+POST /api/auth/login
+POST /api/auth/register
+GET /api/auth/logout
+        </pre>
+
+        <h3>User Management Endpoints</h3>
+        <pre>
+GET /api/users/me
+PATCH /api/users/update-onboarding
+        </pre>
+
+        <h3>Scheduling & Attendance Endpoints</h3>
+        <pre>
+GET /api/timetables/:id
+POST /api/timetables
+POST /api/timetables/:id/generate
+POST /api/timetables/:id/version
+GET /api/timetables/:id/versions
+POST /api/lessons/:id/cancel
+POST /api/lessons/:id/reschedule
+POST /api/attendance/mark
+GET /api/reports/utilization
+GET /api/reports/attendance
+        </pre>
+
+        <h3>Notification Endpoints</h3>
+        <pre>
+GET /api/notifications/preferences
+POST /api/notifications/preferences
+        </pre>
+
+        <h3>Club Management Endpoints</h3>
+        <pre>
+POST /api/clubs/create
+POST /api/clubs/join
+        </pre>
+
+        <h3>Request/Response Formats</h3>
+        <ul>
+            <li><strong>Content-Type:</strong> application/json</li>
+            <li><strong>Authentication:</strong> JWT tokens in cookies</li>
+            <li><strong>Error Handling:</strong> Standardized error responses with codes</li>
+            <li><strong>Validation:</strong> Server-side validation with detailed error messages</li>
+        </ul>
+    </section>
+
+    <section id="database-schema">
+        <h2>8. Database Schema</h2>
+        
+        <h3>User Model</h3>
+        <pre><code>interface IUser {
+  firstName: string
+  lastName: string
+  email: string (unique)
+  password: string (hashed)
+  role: 'student' | 'trainer' | 'admin'
+  clubId?: ObjectId (ref: Club)
+  partnerId?: ObjectId (ref: User)
+  profile?: {
+    phone?: string
+  }
+  onboardingStep?: number
+  createdAt: Date
+  updatedAt: Date
+}</code></pre>
+
+        <h3>Club Model</h3>
+        <pre><code>interface IClub {
+  name: string
+  description?: string
+  logoUrl?: string
+  code: string (unique)
+  trainers: ObjectId[] (ref: User)
+  students: ObjectId[] (ref: User)
+  pairIds: ObjectId[] (ref: Pair)
+  scheduleIds: ObjectId[] (ref: Lesson)
+  pricing?: {
+    individual?: number
+    group?: number
+  }
+  createdAt: Date
+  updatedAt: Date
+}</code></pre>
+
+        <h3>Pair Model</h3>
+        <pre><code>interface IPair {
+  clubId: ObjectId (ref: Club)
+  studentAId: ObjectId (ref: User)
+  studentBId: ObjectId (ref: User)
+  preferredTeacherId?: ObjectId (ref: User)
+  availability?: IWeeklyAvailability  // optional pair-level overrides
+  createdAt: Date
+  updatedAt: Date
+}</code></pre>
+
+        <h3>Availability Types</h3>
+        <pre><code>type DayOfWeek = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
+
+interface ITimeWindow {
+  start: string  // 'HH:mm'
+  end: string    // 'HH:mm'
+}
+
+interface IWeeklyAvailability {
+  timezone: string
+  days: {
+    [day in DayOfWeek]?: ITimeWindow[]  // zero or more windows per day
+  }
+  exceptions?: { date: string; windows: ITimeWindow[] }[]  // holidays/special days
+}</code></pre>
+
+        <h3>Timetable Model</h3>
+        <pre><code>type TimetableType = 'weekly' | 'yearly' | 'after_school' | 'camp' | 'custom'
+
+interface ITimetable {
+  clubId: ObjectId (ref: Club)
+  name: string
+  type: TimetableType
+  startDate: string  // ISO date
+  endDate: string    // ISO date (inclusive)
+  dayStart?: string  // 'HH:mm'
+  dayEnd?: string    // 'HH:mm'
+  defaultBreaks?: ITimeWindow[]
+  consecutiveLessonLimit?: number
+  slotMinutes?: 5 | 10 | 15
+  lockedLessonIds?: ObjectId[] (ref: Lesson)
+  createdBy: ObjectId (ref: User) // teacher/admin
+  createdAt: Date
+  updatedAt: Date
+}</code></pre>
+
+        <h3>Lesson Model</h3>
+        <pre><code>type LessonType = 'group' | 'individual' | 'couple'
+type LessonStatus = 'scheduled' | 'cancelled' | 'completed' | 'no_show' | 'rescheduled'
+
+interface ILesson {
+  timetableId: ObjectId (ref: Timetable)
+  clubId: ObjectId (ref: Club)
+  type: LessonType
+  teacherId: ObjectId (ref: User)
+  roomId?: ObjectId
+  studentIds?: ObjectId[]  // for group
+  studentId?: ObjectId     // for individual
+  pairId?: ObjectId        // for couple
+  date: string             // ISO date
+  start: string            // 'HH:mm'
+  end: string              // 'HH:mm'
+  status: LessonStatus
+  cancellation?: { byUserId: ObjectId; reason?: string; at: Date }
+  locked?: boolean         // protected from regeneration
+  notes?: string
+  createdAt: Date
+  updatedAt: Date
+}</code></pre>
+
+        <h3>Constraint/Conflict Annotation</h3>
+        <pre><code>interface IConflict {
+  lessonId: ObjectId (ref: Lesson)
+  code: 'TEACHER_OVERLAP' | 'ROOM_OVERLAP' | 'STUDENT_OVERLAP' | 'PAIR_NO_OVERLAP' | 'OUTSIDE_HOURS' | 'CAPACITY_EXCEEDED'
+  message: string
+  severity: 'warning' | 'error'
+}</code></pre>
+
+        <h3>Attendance Model</h3>
+        <pre><code>type AttendanceStatus = 'present' | 'absent' | 'excused'
+
+interface IAttendanceRecord {
+  lessonId: ObjectId (ref: Lesson)
+  studentId: ObjectId (ref: User)
+  status: AttendanceStatus
+  reason?: string
+  markedBy: ObjectId (ref: User)
+  markedAt: Date
+  makeupLessonId?: ObjectId (ref: Lesson)
+}</code></pre>
+
+        <h3>Notification Models</h3>
+        <pre><code>type NotificationChannel = 'email' | 'sms' | 'push'
+
+interface INotificationPreference {
+  userId: ObjectId (ref: User)
+  channel: NotificationChannel
+  templateKey: string  // e.g., 'lesson_reminder', 'lesson_cancelled'
+  enabled: boolean
+}
+
+interface INotification {
+  userId: ObjectId (ref: User)
+  channel: NotificationChannel
+  templateKey: string
+  payload: Record<string, any>
+  scheduledAt?: Date
+  sentAt?: Date
+  status: 'queued' | 'sent' | 'failed'
+  error?: string
+}</code></pre>
+
+        <h3>Teacher Workload Preferences</h3>
+        <pre><code>interface ITeacherWorkloadPreference {
+  teacherId: ObjectId (ref: User)
+  dailyMaxLessons?: number
+  preferredDays?: DayOfWeek[]
+  preferredHours?: ITimeWindow[]
+  preferredLessonTypes?: LessonType[]
+  avoidGaps?: boolean
+  updatedAt: Date
+}</code></pre>
+
+        <h3>Timetable Versioning and Backups</h3>
+        <pre><code>interface ITimetableVersion {
+  timetableId: ObjectId (ref: Timetable)
+  name?: string
+  snapshotJson: string     // serialized lessons and settings
+  createdBy: ObjectId (ref: User)
+  createdAt: Date
+}
+
+interface IBackupMeta {
+  scope: 'timetable' | 'club' | 'system'
+  referenceId?: ObjectId   // e.g., timetableId
+  createdAt: Date
+  location: string         // storage URI
+}</code></pre>
+    </section>
+
+    <section id="security-requirements">
+        <h2>9. Security Requirements</h2>
+        
+        <h3>Authentication Security</h3>
+        <ul>
+            <li><strong>Password Hashing:</strong> bcrypt with salt rounds</li>
+            <li><strong>JWT Tokens:</strong> Secure token generation with expiration</li>
+            <li><strong>Session Management:</strong> Secure cookie storage with httpOnly flags</li>
+            <li><strong>Password Requirements:</strong> Minimum complexity requirements</li>
+        </ul>
+
+        <h3>Data Protection</h3>
+        <ul>
+            <li><strong>Input Validation:</strong> Server-side validation for all inputs</li>
+            <li><strong>SQL Injection Prevention:</strong> Parameterized queries with Mongoose</li>
+            <li><strong>XSS Protection:</strong> Input sanitization and output encoding</li>
+            <li><strong>CSRF Protection:</strong> Token-based CSRF protection</li>
+        </ul>
+
+        <h3>Access Control</h3>
+        <ul>
+            <li><strong>Role-based Access:</strong> Strict role-based permissions</li>
+            <li><strong>Route Protection:</strong> Middleware-based route protection</li>
+            <li><strong>API Security:</strong> Authentication required for all API endpoints</li>
+            <li><strong>Data Isolation:</strong> Users can only access their own data</li>
+        </ul>
+    </section>
+
+    <section id="performance-requirements">
+        <h2>10. Performance Requirements</h2>
+        
+        <h3>Response Times</h3>
+        <ul>
+            <li><strong>Page Load:</strong> &lt; 2 seconds for initial page load</li>
+            <li><strong>API Responses:</strong> &lt; 500ms for standard API calls</li>
+            <li><strong>Timetable Generation:</strong> &lt; 5 seconds for complex schedules</li>
+            <li><strong>Database Queries:</strong> &lt; 200ms for standard queries</li>
+        </ul>
+
+        <h3>Scalability</h3>
+        <ul>
+            <li><strong>Concurrent Users:</strong> Support for 100+ concurrent users</li>
+            <li><strong>Database Performance:</strong> Optimized queries with proper indexing</li>
+            <li><strong>Caching Strategy:</strong> Client-side caching for frequently accessed data</li>
+            <li><strong>Resource Optimization:</strong> Efficient component rendering and state management</li>
+        </ul>
+    </section>
+
+    <section id="technical-requirements">
+        <h2>11. Technical Requirements</h2>
+        
+        <h3>Development Environment</h3>
+        <ul>
+            <li><strong>Node.js:</strong> Version 18 or higher</li>
+            <li><strong>Package Manager:</strong> npm or yarn</li>
+            <li><strong>Database:</strong> MongoDB 4.4 or higher</li>
+            <li><strong>Development Server:</strong> Next.js development server</li>
+        </ul>
+
+        <h3>Production Requirements</h3>
+        <ul>
+            <li><strong>Hosting:</strong> Vercel or similar Next.js-compatible platform</li>
+            <li><strong>Database:</strong> MongoDB Atlas or self-hosted MongoDB</li>
+            <li><strong>Environment Variables:</strong> Secure configuration management</li>
+            <li><strong>SSL/TLS:</strong> HTTPS encryption for all communications</li>
+        </ul>
+
+        <h3>Browser Support</h3>
+        <ul>
+            <li><strong>Modern Browsers:</strong> Chrome, Firefox, Safari, Edge (latest 2 versions)</li>
+            <li><strong>Mobile Support:</strong> Responsive design for mobile devices</li>
+            <li><strong>JavaScript:</strong> ES6+ support required</li>
+        </ul>
+    </section>
+
+    <section id="future-enhancements">
+        <h2>12. Future Enhancements</h2>
+        
+        <h3>Phase 2 Features</h3>
+        <ul>
+            <li><strong>Payment Integration:</strong> Stripe/PayPal integration for lesson payments</li>
+            <li><strong>Calendar Integration:</strong> Google Calendar/Outlook synchronization</li>
+            <li><strong>Mobile App:</strong> React Native mobile application</li>
+            <li><strong>Advanced Analytics:</strong> Reporting and analytics dashboard</li>
+            <li><strong>Email Notifications:</strong> Automated email reminders and updates</li>
+        </ul>
+
+        <h3>Phase 3 Features</h3>
+        <ul>
+            <li><strong>Video Integration:</strong> Zoom/Teams integration for virtual lessons</li>
+            <li><strong>Inventory Management:</strong> Costume and equipment management</li>
+            <li><strong>Advanced Reporting:</strong> Financial and performance reporting</li>
+            <li><strong>Multi-language Support:</strong> Internationalization support</li>
+            <li><strong>API for Third-party Integration:</strong> Public API for external integrations</li>
+        </ul>
+
+        <h3>Technical Improvements</h3>
+        <ul>
+            <li><strong>Performance Optimization:</strong> Advanced caching and optimization</li>
+            <li><strong>Testing Suite:</strong> Comprehensive unit and integration tests</li>
+            <li><strong>CI/CD Pipeline:</strong> Automated deployment and testing</li>
+            <li><strong>Monitoring:</strong> Application performance monitoring</li>
+            <li><strong>Backup and Recovery:</strong> Automated backup and disaster recovery</li>
+        </ul>
+    </section>
+
+    <section>
+        <h2>Conclusion</h2>
+        <p>Task Manager V1 represents a comprehensive solution for ballroom dance club management, combining advanced scheduling algorithms with user-friendly interfaces. The system's modular architecture and role-based design provide flexibility for different types of dance organizations while maintaining security and performance standards.</p>
+        
+        <p>The specification outlined above provides a solid foundation for development and future enhancements, ensuring the system can evolve with changing requirements and user needs.</p>
+        
+        <div class="document-info">
+            <p><strong>Document Version:</strong> 1.0</p>
+            <p><strong>Last Updated:</strong> January 2025</p>
+            <p><strong>Next Review:</strong> March 2025</p>
+        </div>
+    </section>
+</body>
+</html>

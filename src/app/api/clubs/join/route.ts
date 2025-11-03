@@ -3,8 +3,6 @@ import connectToDatabase from '@/lib/mongodb'
 import Club from '@/models/Club'
 import User from '@/models/User'
 import jwt, { JwtPayload } from 'jsonwebtoken'
-import mongoose from 'mongoose'
-
 interface JoinRequestBody {
 	userId: string
 	clubCode: string
