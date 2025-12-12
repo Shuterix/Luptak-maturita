@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import {
 	Home,
@@ -7,18 +9,24 @@ import {
 	HelpCircle,
 	Shield,
 	CircleUser,
+	Users,
+	Clock,
 } from 'lucide-react'
 import { ActionButton } from './ActionButton'
 import { LogoutButton } from './LogoutButton'
+import { useAuth } from '@/context/AuthContext'
 
 interface NavItem {
 	name: string
 	href?: string
 	icon: React.ReactNode
 	isAction?: boolean
+	roles?: Array<'student' | 'trainer' | 'admin'>
 }
 
 export default function Sidebar() {
+	const { user } = useAuth()
+
 	const mainNavItems: NavItem[] = [
 		{
 			name: 'Dashboard',
@@ -29,13 +37,33 @@ export default function Sidebar() {
 			name: 'Users',
 			href: '/dashboard/users',
 			icon: <User className="h-5 w-5" />,
+			roles: ['trainer', 'admin'],
+		},
+		{
+			name: 'Couples',
+			href: '/dashboard/couples',
+			icon: <Users className="h-5 w-5" />,
+			roles: ['trainer', 'admin'],
 		},
 		{
 			name: 'Profile',
 			href: '/dashboard/profile',
 			icon: <CircleUser className="h-5 w-5" />,
+			roles: ['trainer', 'admin'],
+		},
+		{
+			name: 'Profile',
+			href: '/dashboard/students/profile',
+			icon: <CircleUser className="h-5 w-5" />,
+			roles: ['student'],
 		},
 	]
+
+	// Filter nav items based on user role
+	const filteredMainNavItems = mainNavItems.filter((item) => {
+		if (!item.roles) return true // Show to all if no role restriction
+		return user?.role && item.roles.includes(user.role as 'student' | 'trainer' | 'admin')
+	})
 
 	const secondaryNavItems: NavItem[] = [
 		{
@@ -72,7 +100,7 @@ export default function Sidebar() {
 
 				<nav>
 					<ul className="space-y-1">
-						{mainNavItems.map((item) => (
+						{filteredMainNavItems.map((item) => (
 							<li key={item.name}>
 								<ActionButton
 									href={item.href}

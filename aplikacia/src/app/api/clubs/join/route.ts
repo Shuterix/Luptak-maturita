@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
 		await club.save()
 	}
 
-	// Update user's clubCode
-	user.clubCode = club.code
+	// Update user's clubId
+	user.clubId = club._id
 	await user.save()
 
 	return NextResponse.json({ message: 'Joined club successfully.', clubId: club._id })

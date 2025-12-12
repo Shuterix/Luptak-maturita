@@ -8,7 +8,7 @@ export interface IClub extends Document {
 	trainers: Types.ObjectId[]
 	students: Types.ObjectId[]
 	pairIds: Types.ObjectId[]
-	scheduleIds: Types.ObjectId[]
+	timetableIds: Types.ObjectId[]
 	pricing?: {
 		individual?: number
 		group?: number
@@ -26,7 +26,7 @@ const ClubSchema: Schema<IClub> = new Schema(
 		trainers: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 		students: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 		pairIds: [{ type: Schema.Types.ObjectId, ref: 'Pair' }],
-		scheduleIds: [{ type: Schema.Types.ObjectId, ref: 'Lesson' }],
+		timetableIds: [{ type: Schema.Types.ObjectId, ref: 'Timetable' }],
 		pricing: {
 			individual: { type: Number },
 			group: { type: Number },

@@ -52,13 +52,14 @@ export async function POST(request: NextRequest) {
 		code: clubCode,
 		trainers: [user._id],
 		students: [],
-		pairIds: [],
-		scheduleIds: [],
+	pairIds: [],
+	timetableIds: [],
 	})
 
 	await newClub.save()
 
-	user.clubCode = clubCode
+	// Update user's clubId
+	user.clubId = newClub._id
 	await user.save()
 
 	return NextResponse.json({ message: 'Club created successfully.', clubId: newClub._id, code: clubCode })

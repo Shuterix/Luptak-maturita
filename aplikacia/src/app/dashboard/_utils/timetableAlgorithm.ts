@@ -17,16 +17,52 @@ export interface Student {
 	unavailableDates?: string[] // dates (yyyy-MM-dd) when the student cannot attend
 	preferredTimes?: string[] // preferred time slots (e.g., ["09:00-11:00", "14:00-16:00"])
 	weeklyLessons?: number // number of lessons per week
+	baseGroup?: string // e.g., 'juniors1', 'juniors2' - assigned by coaches
+}
+
+export interface Couple {
+	name: string // pair label (e.g., "John & Jane")
+	studentA: Student
+	studentB: Student
+	availability: string[] // intersection of both students' availability
+	desiredLessons: number
+	priority: number
+	preferredTeacher?: string
+	baseGroup?: string // inherited from students, can be overridden
+	unavailableDates?: string[] // dates when either student cannot attend
+}
+
+export interface GroupLesson {
+	groupName: string // e.g., 'juniors1', 'juniors2'
+	lessonsTarget: {
+		count: number // number of lessons
+		timeScope: 'weekend' | 'week' | 'month' // time period for the target
+	}
+	teachers: string[] // multiple teachers can lead
+	participants: Couple[] // couples participating in this group lesson
+	staticTimeSlot?: { // optional static scheduling
+		dayOfWeek: string // 'monday', 'tuesday', etc.
+		startTime: string // 'HH:mm'
+		duration?: number // overrides default duration
+	}
+	preferredRoom?: string
+	notes?: string
 }
 
 export interface TimetableLesson {
 	start: string
 	end: string
 	teacher: string | null
+	teachers?: string[] // multiple teachers for group lessons
 	student: string | null
+	students?: string[] // multiple students for group lessons
+	couple?: string | null // couple name for couple lessons
+	couples?: string[] // couple names for group lessons
 	room: string | null
 	type: "lesson" | "break" | "unused"
+	lessonType?: "individual" | "couple" | "group" // specific lesson type
 	duration: number
+	groupName?: string // for group lessons
 	breakType?: "consecutive" | "default" // Optional field to distinguish break types
 	breakFor?: "teacher" | "student" // Indicates who the break is for
 	breakForName?: string // Name of the teacher or student the break is for
@@ -135,7 +171,6 @@ const parseBreakTime = (breakStr: string, date: string): { start: Date; end: Dat
 		const end = timeStringToDate(date, endTime.trim())
 		return { start, end }
 	} catch (err) {
-		console.warn(`Invalid break format: ${breakStr}`, err)
 		return null
 	}
 }
@@ -176,7 +211,7 @@ const dedupeBreakEntries = (lessons: TimetableLesson[]) =>
 		return acc
 	}, [])
 
-const toLocalISOString = (date: Date) => format(date, "yyyy-MM-dd'T'HH:mm:ss")
+// const toLocalISOString = (date: Date) => format(date, "yyyy-MM-dd'T'HH:mm:ss")
 
 const isOverlapping = (startA: Date, endA: Date, startB: Date, endB: Date) =>
 	startA < endB && startB < endA
@@ -187,11 +222,11 @@ const isStudentAvailableOnDate = (student: Student, date: string) => {
 	return !student.unavailableDates.includes(normalizedDate)
 }
 
-const isTeacherAvailableOnDate = (teacher: Teacher, date: string) => {
-	if (!teacher.unavailableDates || teacher.unavailableDates.length === 0) return true
-	const normalizedDate = date.split("T")[0]
-	return !teacher.unavailableDates.includes(normalizedDate)
-}
+// const isTeacherAvailableOnDate = (teacher: Teacher, date: string) => {
+// 	if (!teacher.unavailableDates || teacher.unavailableDates.length === 0) return true
+// 	const normalizedDate = date.split("T")[0]
+// 	return !teacher.unavailableDates.includes(normalizedDate)
+// }
 
 // Comprehensive validation function
 export function validateTimetableConfiguration(
@@ -199,6 +234,8 @@ export function validateTimetableConfiguration(
 	endDate: string,
 	teachers: Teacher[],
 	students: Student[],
+	couples: Couple[] = [],
+	groupLessons: GroupLesson[] = [],
 	breaks: string[]
 ): ValidationResult {
 	const errors: string[] = []
@@ -224,20 +261,20 @@ export function validateTimetableConfiguration(
 	}
 
 	// Teacher validation
-	if (teachers.length === 0) {
+	if (!teachers || teachers.length === 0) {
 		errors.push("At least one teacher is required.")
 	}
 
-	teachers.forEach((teacher, index) => {
+	(teachers || []).forEach((teacher, index) => {
 		if (!teacher.name.trim()) {
 			errors.push(`Teacher ${index + 1}: Name is required.`)
 		}
 
-		if (teacher.availability.length === 0) {
+		if (!teacher.availability || teacher.availability.length === 0) {
 			errors.push(`Teacher ${teacher.name}: At least one availability window is required.`)
 		}
 
-		teacher.availability.forEach((avail, availIndex) => {
+		(teacher.availability || []).forEach((avail) => {
 			const [startTime, endTime] = avail.split("-")
 			if (!startTime || !endTime) {
 				errors.push(`Teacher ${teacher.name}: Invalid availability format "${avail}". Use HH:MM-HH:MM format.`)
@@ -265,21 +302,23 @@ export function validateTimetableConfiguration(
 		}
 	})
 
-	// Student validation
-	if (students.length === 0) {
-		errors.push("At least one student is required.")
+	// Student validation - allow empty students if there are group lessons
+	if ((!students || students.length === 0) && (!groupLessons || groupLessons.length === 0)) {
+		errors.push("At least one student or group lesson is required.")
 	}
 
-	students.forEach((student, index) => {
+	const studentList = Array.isArray(students) ? students : []
+
+	studentList.forEach((student, index) => {
 		if (!student.name.trim()) {
 			errors.push(`Student ${index + 1}: Name is required.`)
 		}
 
-		if (student.availability.length === 0) {
+		if (!student.availability || student.availability.length === 0) {
 			errors.push(`Student ${student.name}: At least one availability window is required.`)
 		}
 
-		student.availability.forEach((avail, availIndex) => {
+		(student.availability || []).forEach((avail) => {
 			const [startTime, endTime] = avail.split("-")
 			if (!startTime || !endTime) {
 				errors.push(`Student ${student.name}: Invalid availability format "${avail}". Use HH:MM-HH:MM format.`)
@@ -318,10 +357,92 @@ export function validateTimetableConfiguration(
 				}
 			})
 		}
-	})
+	});
+
+	// Couple validation
+	(couples || []).forEach((couple, index) => {
+		if (!couple?.name?.trim()) {
+			errors.push(`Couple ${index + 1}: Name is required.`)
+		}
+
+		if (!couple.availability || couple.availability.length === 0) {
+			errors.push(`Couple ${couple?.name || `Couple ${index + 1}`}: At least one availability window is required.`)
+		}
+
+		(couple.availability || []).forEach((avail) => {
+			const [startTime, endTime] = avail.split("-")
+			if (!startTime || !endTime) {
+				errors.push(`Couple ${couple?.name || `Couple ${index + 1}`}: Invalid availability format "${avail}". Use HH:MM-HH:MM format.`)
+			} else {
+				const start = timeStringToDate("2025-01-01", startTime)
+				const end = timeStringToDate("2025-01-01", endTime)
+				if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+					errors.push(`Couple ${couple?.name || `Couple ${index + 1}`}: Invalid time format in availability "${avail}".`)
+				} else if (start >= end) {
+					errors.push(`Couple ${couple?.name || `Couple ${index + 1}`}: Start time must be before end time in availability "${avail}".`)
+				}
+			}
+		})
+
+		if (couple.desiredLessons < 0) {
+			errors.push(`Couple ${couple?.name || `Couple ${index + 1}`}: Desired lessons cannot be negative.`)
+		}
+
+		if (couple.priority < 1 || couple.priority > 10) {
+			warnings.push(`Couple ${couple?.name || `Couple ${index + 1}`}: Priority should be between 1-10.`)
+		}
+
+		// Check if preferred teacher exists
+		if (couple.preferredTeacher && !teachers.find(t => t.name === couple.preferredTeacher)) {
+			warnings.push(`Couple ${couple?.name || `Couple ${index + 1}`}: Preferred teacher "${couple.preferredTeacher}" does not exist.`)
+		}
+	});
+
+	// Group lesson validation
+	(groupLessons || []).forEach((groupLesson, index) => {
+		if (!groupLesson?.groupName?.trim()) {
+			errors.push(`Group lesson ${index + 1}: Group name is required.`)
+		}
+
+		if (groupLesson.lessonsTarget.count < 0) {
+			errors.push(`Group lesson ${groupLesson?.groupName || `Group lesson ${index + 1}`}: Weekly lessons target cannot be negative.`)
+		}
+
+		if (!groupLesson.teachers || groupLesson.teachers.length === 0) {
+			errors.push(`Group lesson ${groupLesson?.groupName || `Group lesson ${index + 1}`}: At least one teacher is required.`)
+		}
+
+		(groupLesson.teachers || []).forEach(teacherName => {
+			if (!teachers.find(t => t.name === teacherName)) {
+				errors.push(`Group lesson ${groupLesson?.groupName || `Group lesson ${index + 1}`}: Teacher "${teacherName}" does not exist.`)
+			}
+		})
+
+		if (!groupLesson.participants || groupLesson.participants.length === 0) {
+			errors.push(`Group lesson ${groupLesson?.groupName || `Group lesson ${index + 1}`}: At least one participant couple is required.`)
+		}
+
+		// Note: Group lesson participants are validated when converting from dbCouples in page.tsx
+		// The couples parameter may be empty if no couples have desiredLessons > 0, but group lessons
+		// can still be scheduled independently. We skip this validation check since participants
+		// are validated against dbCouples during conversion, not against the couples parameter.
+		// If a couple doesn't exist in dbCouples, it will have default availability during conversion.
+
+		// Check static time slot format
+		if (groupLesson.staticTimeSlot) {
+			const { startTime, duration } = groupLesson.staticTimeSlot
+			const start = timeStringToDate("2025-01-01", startTime)
+			if (isNaN(start.getTime())) {
+				errors.push(`Group lesson ${groupLesson?.groupName || `Group lesson ${index + 1}`}: Invalid start time format "${startTime}".`)
+			}
+			if (duration && duration <= 0) {
+				errors.push(`Group lesson ${groupLesson?.groupName || `Group lesson ${index + 1}`}: Duration must be positive.`)
+			}
+		}
+	});
 
 	// Break validation
-	breaks.forEach((breakTime, index) => {
+	(breaks || []).forEach((breakTime, index) => {
 		if (!breakTime || typeof breakTime !== 'string') {
 			errors.push(`Break ${index + 1}: Invalid break time.`)
 			return
@@ -396,6 +517,9 @@ export function validateTimetableConfiguration(
 		suggestions
 	}
 }
+
+
+
 
 // Function to suggest alternative dates
 export function suggestAlternativeDates(
@@ -501,21 +625,25 @@ function calculateExpectedSatisfaction(
 	const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
 	
 	// Calculate total capacity
-	const totalCapacity = teachers.reduce((sum, teacher) => {
+	const totalCapacity = (teachers || []).reduce((sum, teacher) => {
 		return sum + (teacher.maxLessonsPerDay * days)
 	}, 0)
-	
+
 	// Calculate total demand
-	const totalDemand = students.reduce((sum, student) => {
+	const totalDemand = (students || []).reduce((sum, student) => {
 		return sum + student.desiredLessons
 	}, 0)
 	
 	// Calculate availability overlap score
-	let overlapScore = 0
-	teachers.forEach(teacher => {
-		students.forEach(student => {
-			teacher.availability.forEach(tAvail => {
-				student.availability.forEach(sAvail => {
+	let overlapScore: number = 0
+	const teacherList = Array.isArray(teachers) ? teachers : []
+	const studentList = Array.isArray(students) ? students : []
+	teacherList.forEach(teacher => {
+		studentList.forEach(student => {
+			const availability = teacher.availability || []
+			const studentAvailability = student.availability || []
+			availability.forEach(tAvail => {
+				studentAvailability.forEach(sAvail => {
 					const [tStart, tEnd] = tAvail.split("-")
 					const [sStart, sEnd] = sAvail.split("-")
 					const tStartTime = timeStringToDate("2025-01-01", tStart)
@@ -545,12 +673,14 @@ export function generateTimetable(
 	date: string,
 	teachers: Teacher[],
 	students: Student[],
-	breaks: string[] = DEFAULT_BREAKS,
+	couples: Couple[] = [],
+	groupLessons: GroupLesson[] = [],
+	_breaks: string[] = DEFAULT_BREAKS,
 	daySchedule: DaySchedule = DEFAULT_DAY_SCHEDULE,
 	config: TimetableConfig = { lessonDuration: DEFAULT_SETTINGS.lessonDuration, studentBreakAfter: DEFAULT_SETTINGS.studentBreakAfter, teacherBreakAfter: DEFAULT_SETTINGS.teacherBreakAfter }
 ): { date: string; lessons: TimetableLesson[]; error?: string; warning?: string } {
 	// Validate configuration first
-	const validation = validateTimetableConfiguration(date, date, teachers, students, breaks)
+	const validation = validateTimetableConfiguration(date, date, teachers, students, couples, groupLessons, _breaks)
 	if (!validation.isValid) {
 		return {
 			date,
@@ -563,62 +693,326 @@ export function generateTimetable(
 	const studentTeacherLessonsCount: Record<string, Record<string, number>> = {} // student -> teacher -> count
 	const studentLastTeacher: Record<string, string | null> = {}
 	const teacherCooldown: Record<string, number> = {}
+	const coupleLessonsCount: Record<string, number> = {}
+	const groupLessonsCount: Record<string, number> = {} // groupName -> count
 
-	students.forEach((s) => {
+	const studentList = Array.isArray(students) ? students : []
+	const teacherList = Array.isArray(teachers) ? teachers : []
+	studentList.forEach((s) => {
 		studentLessonsCount[s.name] = 0
 		studentLastTeacher[s.name] = null
 		studentTeacherLessonsCount[s.name] = {}
-		teachers.forEach((t) => {
+		teacherList.forEach((t) => {
 			studentTeacherLessonsCount[s.name][t.name] = 0
 		})
-	})
-	teachers.forEach((t) => {
+	});
+	(couples || []).forEach((c) => {
+		coupleLessonsCount[c.name] = 0
+	});
+	(groupLessons || []).forEach((g) => {
+		groupLessonsCount[g.groupName] = 0
+	});
+	(teachers || []).forEach((t) => {
 		teacherCooldown[t.name] = 0
-	})
+	});
 
 	// Build all possible lesson slots, respecting default breaks
 	const allSlots: { start: Date; end: Date; duration: number }[] = []
 	const dayStart = timeStringToDate(date, daySchedule.start)
 	const dayEnd = timeStringToDate(date, daySchedule.end)
-	let slotStart = dayStart
-
-	while (slotStart < dayEnd) {
-		const slotEnd = addMinutes(slotStart, config.lessonDuration)
-		if (slotEnd > dayEnd) break
-
-		// Check if this slot overlaps with any default break
-		const overlappingBreak = breaks.find((b) => {
-			if (!b || typeof b !== 'string') return false
-			const breakParts = b.split("-")
-			if (breakParts.length !== 2) return false
-			
+	
+	// Collect all availability windows from all teachers
+	const allAvailabilityWindows: Array<{ start: Date; end: Date }> = []
+	for (const teacher of teachers) {
+		for (const availability of teacher.availability) {
 			try {
-				const [bStart, bEnd] = breakParts
-				const breakStart = timeStringToDate(date, bStart.trim())
-				const breakEnd = timeStringToDate(date, bEnd.trim())
-				// Check if slot overlaps with break (either starts during break or ends during break)
-				return (slotStart < breakEnd && slotEnd > breakStart)
+				const [aStart, aEnd] = availability.split("-")
+				const startTime = timeStringToDate(date, aStart.trim())
+				const endTime = timeStringToDate(date, aEnd.trim())
+				if (startTime < endTime && startTime < dayEnd && endTime > dayStart) {
+					allAvailabilityWindows.push({
+						start: startTime < dayStart ? dayStart : startTime,
+						end: endTime > dayEnd ? dayEnd : endTime
+					})
+				}
 			} catch (err) {
-				console.warn(`Invalid break format: ${b}`, err)
-				return false
+				// Skip invalid availability windows
+				continue
 			}
-		})
+		}
+	}
+	
+	// If no teacher availability found, use full day
+	if (allAvailabilityWindows.length === 0) {
+		allAvailabilityWindows.push({ start: dayStart, end: dayEnd })
+	}
+	
+	// Generate slots for each availability window
+	const slotMinutes = 15 // Use 15-minute increments for slot generation
+	for (const window of allAvailabilityWindows) {
+		let slotStart = window.start
+		
+		while (slotStart < window.end) {
+			const slotEnd = addMinutes(slotStart, config.lessonDuration)
+			if (slotEnd > window.end) break
 
-		if (overlappingBreak) {
-			// If slot overlaps with a break, skip to after the break ends
-			try {
-				const [bStart, bEnd] = overlappingBreak.split("-")
-				const breakEnd = timeStringToDate(date, bEnd.trim())
-				slotStart = breakEnd
-			} catch (err) {
-				console.warn(`Error parsing break end time: ${overlappingBreak}`, err)
-				// Skip this break and continue
-				slotStart = slotEnd
+			// Check if this slot overlaps with any default break
+			const overlappingBreak = _breaks.find((b) => {
+				if (!b || typeof b !== 'string') return false
+				const breakParts = b.split("-")
+				if (breakParts.length !== 2) return false
+
+				try {
+					const [bStart, bEnd] = breakParts
+					const breakStart = timeStringToDate(date, bStart.trim())
+					const breakEnd = timeStringToDate(date, bEnd.trim())
+					// Check if slot overlaps with break (either starts during break or ends during break)
+					return (slotStart < breakEnd && slotEnd > breakStart)
+				} catch (err) {
+					return false
+				}
+			})
+
+			if (overlappingBreak) {
+				// If slot overlaps with a break, skip to after the break ends
+				try {
+					const [bStart, bEnd] = overlappingBreak.split("-")
+					const breakEnd = timeStringToDate(date, bEnd.trim())
+					slotStart = breakEnd
+				} catch (err) {
+					// Skip this break and continue
+					slotStart = addMinutes(slotStart, slotMinutes)
+				}
+			} else {
+				// Only add slots that don't overlap with breaks and fit within the window
+				if (slotStart >= window.start && slotEnd <= window.end) {
+					allSlots.push({ start: slotStart, end: slotEnd, duration: config.lessonDuration })
+				}
+				slotStart = addMinutes(slotStart, slotMinutes) // Use smaller increments for more flexibility
+			}
+		}
+	}
+	
+	// Sort slots by start time
+	allSlots.sort((a, b) => a.start.getTime() - b.start.getTime())
+
+	// Schedule group lessons first (highest priority)
+	for (const groupLesson of groupLessons) {
+		// Check if we've met the target for this group (simplified for single day)
+		if (groupLessonsCount[groupLesson.groupName] >= groupLesson.lessonsTarget.count) {
+			continue
+		}
+
+		// Check if we have static time slot
+		if (groupLesson.staticTimeSlot) {
+			const { startTime, duration } = groupLesson.staticTimeSlot
+			const lessonDuration = duration || config.lessonDuration
+			const lessonStart = timeStringToDate(date, startTime)
+			const lessonEnd = addMinutes(lessonStart, lessonDuration)
+
+			// Check if static time is available
+			const isAvailable = !timetable.some(lesson =>
+				isOverlapping(lessonStart, lessonEnd, new Date(lesson.start), new Date(lesson.end))
+			)
+
+			if (isAvailable) {
+				// Check teacher availability
+				const availableTeacher = groupLesson.teachers.find(teacherName => {
+					const teacher = teachers.find(t => t.name === teacherName)
+					if (!teacher) return false
+
+					// Check teacher availability for this time
+					const isAvailable = teacher.availability.some((a) => {
+						const [aStart, aEnd] = a.split("-")
+						const startTime = timeStringToDate(date, aStart)
+						const endTime = timeStringToDate(date, aEnd)
+						return lessonStart >= startTime && lessonEnd <= endTime
+					}) && teacherCooldown[teacherName] === 0
+					
+					if (!isAvailable) return false
+					
+					// Check if teacher is already scheduled for another lesson at this time
+					const hasConflict = timetable.some((l) => {
+						if (!isOverlapping(lessonStart, lessonEnd, new Date(l.start), new Date(l.end))) {
+							return false
+						}
+						// Check if teacher is in an individual or couple lesson
+						if (l.teacher === teacherName) {
+							return true
+						}
+						// Check if teacher is in another group lesson
+						if (l.lessonType === 'group' && l.teachers && Array.isArray(l.teachers)) {
+							return l.teachers.includes(teacherName)
+						}
+						return false
+					})
+					
+					return !hasConflict
+				})
+
+				if (availableTeacher) {
+					// Check all participants are available
+					const allParticipantsAvailable = groupLesson.participants.every(couple =>
+						couple.availability.some((a) => {
+							const [aStart, aEnd] = a.split("-")
+							const startTime = timeStringToDate(date, aStart)
+							const endTime = timeStringToDate(date, aEnd)
+							return lessonStart >= startTime && lessonEnd <= endTime
+						}) &&
+						!timetable.some(lesson => {
+							if (!isOverlapping(lessonStart, lessonEnd, new Date(lesson.start), new Date(lesson.end))) {
+								return false
+							}
+							// Check if participant has an individual lesson
+							if (lesson.student === couple.name) {
+								return true
+							}
+							// Check if participant is in another couple lesson
+							if (lesson.couple === couple.name) {
+								return true
+							}
+							// Check if participant is in another group lesson
+							if (lesson.couples && Array.isArray(lesson.couples) && lesson.couples.includes(couple.name)) {
+								return true
+							}
+							return false
+						})
+					)
+
+					if (allParticipantsAvailable) {
+						// Schedule the group lesson
+						timetable.push({
+							start: lessonStart.toISOString(),
+							end: lessonEnd.toISOString(),
+							teachers: groupLesson.teachers,
+							teacher: availableTeacher, // primary teacher
+							couples: groupLesson.participants.map(p => p.name),
+							room: groupLesson.preferredRoom || teachers.find(t => t.name === availableTeacher)?.room || null,
+							type: "lesson",
+							lessonType: "group",
+							duration: lessonDuration,
+							groupName: groupLesson.groupName,
+							student: null,
+						})
+
+						// Update count based on timeScope
+						if (groupLesson.lessonsTarget.timeScope === 'timetable') {
+							groupLessonsCount[groupLesson.groupName] = (groupLessonsCount[groupLesson.groupName] || 0) + 1
+						} else {
+							localGroupLessonsCount[groupLesson.groupName] = (localGroupLessonsCount[groupLesson.groupName] || 0) + 1
+						}
+						teacherCooldown[availableTeacher] = 1 // Simple cooldown
+
+						// Update participant lesson counts
+						groupLesson.participants.forEach(couple => {
+							coupleLessonsCount[couple.name]++
+						})
+					}
+				}
 			}
 		} else {
-			// Only add slots that don't overlap with breaks
-			allSlots.push({ start: slotStart, end: slotEnd, duration: config.lessonDuration })
-			slotStart = slotEnd
+			// Automatic scheduling - find available slot
+			for (const slot of allSlots) {
+				// Skip if slot is already taken
+				if (timetable.some(lesson => isOverlapping(slot.start, slot.end, new Date(lesson.start), new Date(lesson.end)))) {
+					continue
+				}
+
+				// Find available teacher
+				const availableTeacher = groupLesson.teachers.find(teacherName => {
+					const teacher = teachers.find(t => t.name === teacherName)
+					if (!teacher || teacherCooldown[teacherName] > 0) return false
+
+					const isAvailable = teacher.availability.some((a) => {
+						const [aStart, aEnd] = a.split("-")
+						const startTime = timeStringToDate(date, aStart)
+						const endTime = timeStringToDate(date, aEnd)
+						return slot.start >= startTime && slot.end <= endTime
+					})
+					
+					if (!isAvailable) return false
+					
+					// Check if teacher is already scheduled for another lesson at this time
+					const hasConflict = timetable.some((l) => {
+						if (!isOverlapping(slot.start, slot.end, new Date(l.start), new Date(l.end))) {
+							return false
+						}
+						// Check if teacher is in an individual or couple lesson
+						if (l.teacher === teacherName) {
+							return true
+						}
+						// Check if teacher is in another group lesson
+						if (l.lessonType === 'group' && l.teachers && Array.isArray(l.teachers)) {
+							return l.teachers.includes(teacherName)
+						}
+						return false
+					})
+					
+					return !hasConflict
+				})
+
+				if (availableTeacher) {
+					// Check all participants are available
+					const allParticipantsAvailable = groupLesson.participants.every(couple =>
+						couple.availability.some((a) => {
+							const [aStart, aEnd] = a.split("-")
+							const startTime = timeStringToDate(date, aStart)
+							const endTime = timeStringToDate(date, aEnd)
+							return slot.start >= startTime && slot.end <= endTime
+						}) &&
+						!timetable.some(lesson => {
+							if (!isOverlapping(slot.start, slot.end, new Date(lesson.start), new Date(lesson.end))) {
+								return false
+							}
+							// Check if participant has an individual lesson
+							if (lesson.student === couple.name) {
+								return true
+							}
+							// Check if participant is in another couple lesson
+							if (lesson.couple === couple.name) {
+								return true
+							}
+							// Check if participant is in another group lesson
+							if (lesson.couples && Array.isArray(lesson.couples) && lesson.couples.includes(couple.name)) {
+								return true
+							}
+							return false
+						})
+					)
+
+					if (allParticipantsAvailable) {
+						// Schedule the group lesson
+						timetable.push({
+							start: slot.start.toISOString(),
+							end: slot.end.toISOString(),
+							teachers: groupLesson.teachers,
+							teacher: availableTeacher,
+							couples: groupLesson.participants.map(p => p.name),
+							room: groupLesson.preferredRoom || teachers.find(t => t.name === availableTeacher)?.room || null,
+							type: "lesson",
+							lessonType: "group",
+							duration: slot.duration,
+							groupName: groupLesson.groupName,
+							student: null,
+						})
+
+						// Update count based on timeScope
+						if (groupLesson.lessonsTarget.timeScope === 'timetable') {
+							groupLessonsCount[groupLesson.groupName] = (groupLessonsCount[groupLesson.groupName] || 0) + 1
+						} else {
+							localGroupLessonsCount[groupLesson.groupName] = (localGroupLessonsCount[groupLesson.groupName] || 0) + 1
+						}
+						teacherCooldown[availableTeacher] = 1
+
+						// Update participant lesson counts
+						groupLesson.participants.forEach(couple => {
+							coupleLessonsCount[couple.name]++
+						})
+
+						break // Found a slot, move to next group lesson
+					}
+				}
+			}
 		}
 	}
 
@@ -667,6 +1061,23 @@ export function generateTimetable(
 				return slot.start >= startTime && slot.end <= endTime
 			})) continue
 
+			// Check if teacher is already scheduled for another lesson at this time
+			const teacherConflict = timetable.some((l) => {
+				if (!isOverlapping(slot.start, slot.end, new Date(l.start), new Date(l.end))) {
+					return false
+				}
+				// Check if teacher is in an individual or couple lesson
+				if (l.teacher === teacher.name) {
+					return true
+				}
+				// Check if teacher is in a group lesson (via teachers array)
+				if (l.lessonType === 'group' && l.teachers && Array.isArray(l.teachers)) {
+					return l.teachers.includes(teacher.name)
+				}
+				return false
+			})
+			if (teacherConflict) continue
+
 			// Teacher max lessons
 			const teacherLessons = timetable.filter((l) => l.teacher === teacher.name).length
 			if (teacherLessons >= teacher.maxLessonsPerDay) continue
@@ -686,7 +1097,7 @@ export function generateTimetable(
 					const currentStart = new Date(currentLesson.start)
 					
 					// Check if there's a break between these lessons (both default breaks and explicit breaks)
-					const hasBreakBetween = breaks.some((b) => {
+					const hasBreakBetween = _breaks.some((b) => {
 						const breakTime = parseBreakTime(b, date)
 						if (!breakTime) return false
 						// Check if the break is between the lessons
@@ -716,7 +1127,7 @@ export function generateTimetable(
 					const lastLessonEnd = new Date(lastLesson.end)
 					
 					// Check if there's a break coming up after the last lesson
-					const upcomingBreak = breaks.find((b) => {
+					const upcomingBreak = _breaks.find((b) => {
 						const breakTime = parseBreakTime(b, date)
 						if (!breakTime) return false
 						// Check if the break starts after the last lesson and before the current slot
@@ -740,7 +1151,7 @@ export function generateTimetable(
 					const lastLessonEnd = new Date(lastLesson.end)
 					
 					// Check if there's a default break or sufficient gap after the last lesson
-					const hasDefaultBreak = breaks.some((b) => {
+					const hasDefaultBreak = _breaks.some((b) => {
 						const breakTime = parseBreakTime(b, date)
 						if (!breakTime) return false
 						// Check if the break starts within 90 minutes of the last lesson end (more lenient)
@@ -751,12 +1162,11 @@ export function generateTimetable(
 					if (!hasDefaultBreak) {
 						const requiredBreakStart = new Date(lastLessonEnd.getTime() + config.lessonDuration * 60 * 1000)
 						if (slot.start.getTime() < requiredBreakStart.getTime()) {
-							console.log(`Teacher ${teacher.name} needs break - skipping slot at ${slot.start.toLocaleTimeString()}`)
 							continue // Teacher needs a break
 						}
 					} else {
 						// If there's a default break, check if the current slot is after the break
-						const defaultBreak = breaks.find((b) => {
+						const defaultBreak = _breaks.find((b) => {
 							const breakTime = parseBreakTime(b, date)
 							if (!breakTime) return false
 							return Math.abs(breakTime.start.getTime() - lastLessonEnd.getTime()) <= 90 * 60 * 1000
@@ -767,12 +1177,10 @@ export function generateTimetable(
 							if (breakTime) {
 								// Only allow lessons after the default break ends (allow lessons that start exactly when break ends)
 								if (slot.start.getTime() < breakTime.end.getTime()) {
-									console.log(`Teacher ${teacher.name} needs to wait for default break to end - skipping slot at ${slot.start.toLocaleTimeString()}`)
 									continue // Teacher needs to wait for break to end
 								}
 								
 								// If we're past the default break, allow the lesson (consecutive count is reset after break)
-								console.log(`Teacher ${teacher.name} can have lesson after default break at ${slot.start.toLocaleTimeString()}`)
 								// Don't continue - allow the lesson to be scheduled
 							}
 						}
@@ -816,11 +1224,25 @@ export function generateTimetable(
 					return slot.start >= startTime && slot.end <= endTime
 				})) return false
 
-				// Check overlapping lessons
-				const conflict = timetable.some((l) =>
-					l.student === s.name &&
-					isOverlapping(slot.start, slot.end, new Date(l.start), new Date(l.end))
-				)
+				// Check overlapping lessons (both individual and group lessons)
+				const conflict = timetable.some((l) => {
+					if (!isOverlapping(slot.start, slot.end, new Date(l.start), new Date(l.end))) {
+						return false
+					}
+					// Check if student is in an individual lesson
+					if (l.student === s.name) {
+						return true
+					}
+					// Check if student is in a group lesson (via couples array)
+					if (l.lessonType === 'group' && l.couples && Array.isArray(l.couples)) {
+						return l.couples.includes(s.name)
+					}
+					// Check if student is in a couple lesson
+					if (l.lessonType === 'couple' && l.couple === s.name) {
+						return true
+					}
+					return false
+				})
 				if (conflict) return false
 
 				// Check if student has a consecutive break during this time slot
@@ -851,7 +1273,7 @@ export function generateTimetable(
 						const currentStart = new Date(currentLesson.start)
 						
 						// Check if there's a break between these lessons
-						const hasBreakBetween = breaks.some((b) => {
+						const hasBreakBetween = _breaks.some((b) => {
 							const [bStart, bEnd] = b.split("-")
 							const breakStart = timeStringToDate(date, bStart)
 							const breakEnd = timeStringToDate(date, bEnd)
@@ -875,7 +1297,7 @@ export function generateTimetable(
 						const lastLessonEnd = new Date(lastLesson.end)
 						
 						// Check if there's a default break or sufficient gap after the last lesson
-						const hasDefaultBreak = breaks.some((b) => {
+						const hasDefaultBreak = _breaks.some((b) => {
 							const [bStart, bEnd] = b.split("-")
 							const breakStart = timeStringToDate(date, bStart)
 							const breakEnd = timeStringToDate(date, bEnd)
@@ -887,12 +1309,11 @@ export function generateTimetable(
 						if (!hasDefaultBreak) {
 							const requiredBreakStart = new Date(lastLessonEnd.getTime() + config.lessonDuration * 60 * 1000)
 							if (slot.start.getTime() < requiredBreakStart.getTime()) {
-								console.log(`Student ${s.name} needs break - skipping slot at ${slot.start.toLocaleTimeString()}`)
 								return false
 							}
 						} else {
 							// If there's a default break, check if the current slot is after the break
-							const defaultBreak = breaks.find((b) => {
+							const defaultBreak = _breaks.find((b) => {
 								const [bStart, bEnd] = b.split("-")
 								const breakStart = timeStringToDate(date, bStart)
 								const breakEnd = timeStringToDate(date, bEnd)
@@ -906,12 +1327,10 @@ export function generateTimetable(
 								
 								// Only allow lessons after the default break ends (allow lessons that start exactly when break ends)
 								if (slot.start.getTime() < breakEnd.getTime()) {
-									console.log(`Student ${s.name} needs to wait for default break to end - skipping slot at ${slot.start.toLocaleTimeString()}`)
 									return false
 								}
 								
 								// If we're past the default break, allow the lesson (consecutive count is reset after break)
-								console.log(`Student ${s.name} can have lesson after default break at ${slot.start.toLocaleTimeString()}`)
 								// Don't return false here - allow the lesson to be scheduled
 							}
 						}
@@ -972,7 +1391,7 @@ export function generateTimetable(
 					const lastLessonEnd = new Date(lastLesson.end)
 					
 					// Check if there's already a default break coming up
-					const hasDefaultBreak = breaks.some((b) => {
+					const hasDefaultBreak = _breaks.some((b) => {
 						const [bStart, bEnd] = b.split("-")
 						const breakStart = timeStringToDate(date, bStart)
 						const breakEnd = timeStringToDate(date, bEnd)
@@ -1004,7 +1423,6 @@ export function generateTimetable(
 								breakFor: "student", // Break is for the student
 								breakForName: availableStudent.name, // Name of the student
 							})
-							console.log(`Inserted break for ${availableStudent.name} from ${breakStart.toLocaleTimeString()} to ${breakEnd.toLocaleTimeString()}`)
 						}
 					}
 				}
@@ -1024,7 +1442,7 @@ export function generateTimetable(
 					const currentStart = new Date(currentLesson.start)
 					
 					// Check if there's a break between these lessons (both default breaks and explicit breaks)
-					const hasBreakBetween = breaks.some((b) => {
+					const hasBreakBetween = _breaks.some((b) => {
 						const breakTime = parseBreakTime(b, date)
 						if (!breakTime) return false
 						// Check if the break is between the lessons
@@ -1054,7 +1472,7 @@ export function generateTimetable(
 					const lastLessonEnd = new Date(lastLesson.end)
 					
 					// Check if there's already a default break starting at the same time or very close
-					const hasDefaultBreakAtSameTime = breaks.some((b) => {
+					const hasDefaultBreakAtSameTime = _breaks.some((b) => {
 						const breakTime = parseBreakTime(b, date)
 						if (!breakTime) return false
 						// Check if there's a default break starting within 5 minutes of the last lesson end
@@ -1086,10 +1504,8 @@ export function generateTimetable(
 								breakFor: "teacher", // Break is for the teacher
 								breakForName: teacher.name, // Name of the teacher
 							})
-							console.log(`Inserted break for teacher ${teacher.name} from ${breakStart.toLocaleTimeString()} to ${breakEnd.toLocaleTimeString()}`)
 						}
 					} else {
-						console.log(`Teacher ${teacher.name} consecutive limit reached, but default break already exists at ${lastLessonEnd.toLocaleTimeString()}`)
 					}
 				}
 			}
@@ -1117,19 +1533,6 @@ export function generateTimetable(
 		return false
 	})
 
-	// Debug logging
-	console.log('Scheduling Debug:', {
-		date,
-		totalSlots: allSlots.length,
-		totalLessons: timetable.filter(l => l.type === 'lesson').length,
-		studentProgress: students.map(s => ({
-			name: s.name,
-			desired: s.desiredLessons,
-			scheduled: studentLessonsCount[s.name],
-			remaining: s.desiredLessons - studentLessonsCount[s.name],
-			teacherLessons: studentTeacherLessonsCount[s.name]
-		}))
-	})
 	
 	let warning
 	if (unmet.length > 0) {
@@ -1146,16 +1549,6 @@ export function generateTimetable(
 		}).join(", ")
 		
 		warning = `⚠️ Could not schedule all lessons. Unmet: ${unmetDetails}`
-		console.log('Scheduling Summary:', {
-			totalSlots: allSlots.length,
-			totalLessons: timetable.filter(l => l.type === 'lesson').length,
-			studentProgress: Object.entries(studentLessonsCount).map(([name, count]) => ({
-				name,
-				scheduled: count,
-				desired: students.find(s => s.name === name)?.desiredLessons || 0,
-				teacherLessons: studentTeacherLessonsCount[name]
-			}))
-		})
 	}
 	return {
 		date,
@@ -1189,11 +1582,12 @@ export function generateMultiDayTimetable(
 	students: Student[],
 	breaks: string[] = DEFAULT_BREAKS,
 	daySchedules: DayScheduleMap = {},
-	config: TimetableConfig = { lessonDuration: DEFAULT_SETTINGS.lessonDuration, studentBreakAfter: DEFAULT_SETTINGS.studentBreakAfter, teacherBreakAfter: DEFAULT_SETTINGS.teacherBreakAfter }
+	config: TimetableConfig = { lessonDuration: DEFAULT_SETTINGS.lessonDuration, studentBreakAfter: DEFAULT_SETTINGS.studentBreakAfter, teacherBreakAfter: DEFAULT_SETTINGS.teacherBreakAfter },
+	groupLessons: GroupLesson[] = []
 ): MultiDayTimetableResult {
 	
 	// Validate configuration first
-	const validation = validateTimetableConfiguration(startDate, endDate, teachers, students, breaks)
+	const validation = validateTimetableConfiguration(startDate, endDate, teachers, students, [], groupLessons, breaks)
 	if (!validation.isValid) {
 		return {
 			dateRange: { start: startDate, end: endDate },
@@ -1240,6 +1634,17 @@ const studentState: Record<string, {
 		}
 	})
 	
+	// Track group lesson counts across all days (for timetable timeScope)
+	const groupLessonsCount: Record<string, number> = {}
+	if (groupLessons && Array.isArray(groupLessons)) {
+		groupLessons.forEach((g: GroupLesson) => {
+			// Only track counts for timetable timeScope
+			if (g.lessonsTarget.timeScope === 'timetable') {
+				groupLessonsCount[g.groupName] = 0
+			}
+		})
+	}
+	
 	// Generate timetable for each day
 	for (let dayIndex = 0; dayIndex < dates.length; dayIndex++) {
 		const date = dates[dayIndex]
@@ -1274,23 +1679,11 @@ const studentState: Record<string, {
 			}
 		}).filter(s => s.desiredLessons > 0 && isStudentAvailableOnDate(s, date))
 		
-		// Debug logging for multi-day distribution
-		if (dayStudents.length > 0) {
-			console.log(`Day ${dayIndex + 1} (${date}): Scheduling for ${dayStudents.length} students with remaining lessons:`, 
-				dayStudents.map(s => `${s.name}: ${s.desiredLessons} total, ${Object.entries(s.teacherLessons || {}).map(([t, c]) => `${t}:${c}`).join(', ')}`))
-		} else {
-			console.log(`Day ${dayIndex + 1} (${date}): No students with remaining lessons to schedule`)
-		}
-		
-		// Debug logging for teacher-specific progress
-		console.log(`Day ${dayIndex + 1} (${date}): Current teacher-specific progress:`, 
-			Object.entries(studentTeacherProgress).map(([studentName, teacherProgress]) => 
-				`${studentName}: ${Object.entries(teacherProgress).map(([teacher, count]) => `${teacher}:${count}`).join(', ')}`
-			).join(' | '))
 		
 		// Generate timetable with cross-day state tracking
 	const scheduleForDay = daySchedules[date] ?? DEFAULT_DAY_SCHEDULE
-		const dayResult = generateTimetableWithState(date, teachers, dayStudents, breaks, scheduleForDay, studentState, config)
+		const dayResult = generateTimetableWithState(date, teachers, dayStudents, breaks, scheduleForDay, studentState, config, groupLessons, groupLessonsCount)
+		// Note: groupLessonsCount for timetable timeScope is updated inside generateTimetableWithState
 		
 		// Update progress
 		dayResult.lessons.forEach(lesson => {
@@ -1302,12 +1695,6 @@ const studentState: Record<string, {
 			}
 		})
 		
-		// Debug logging for progress tracking
-		const lessonsScheduledToday = dayResult.lessons.filter(l => l.type === 'lesson').length
-		if (lessonsScheduledToday > 0) {
-			console.log(`Day ${dayIndex + 1} (${date}): Scheduled ${lessonsScheduledToday} lessons. Progress:`, 
-				Object.entries(studentProgress).map(([name, progress]) => `${name}: ${progress.scheduled}/${progress.desired}`).join(', '))
-		}
 		
 	// Ensure required student breaks are explicitly recorded between consecutive lesson runs
 	const lessonsByStudent: Record<string, TimetableLesson[]> = {}
@@ -1366,10 +1753,6 @@ const studentState: Record<string, {
 	// Evaluate unmet students after scheduling all days
 	const unmetEvaluation = evaluateUnmetStudents(students, studentProgress, studentTeacherProgress)
 	
-	// Debug logging for final results
-	console.log('Multi-day scheduling complete. Final progress:', 
-		Object.entries(studentProgress).map(([name, progress]) => `${name}: ${progress.scheduled}/${progress.desired}`).join(', '))
-	console.log('Unmet students:', unmetEvaluation.names)
 	
 	if (days.length > 0) {
 		const lastIndex = days.length - 1
@@ -1492,7 +1875,9 @@ export function updateTimetableWithNewBreaks(
 					newBreaks,
 					schedule,
 					studentState,
-					config
+					config,
+					[], // groupLessons - not used in rescheduling
+					{} // groupLessonsCount - not used in rescheduling
 				)
 				
 				// Combine valid lessons with rescheduled lessons
@@ -1558,7 +1943,9 @@ function generateTimetableWithState(
 		lastTeacher: string | null
 		lastLessonTime: string | null
 	}>,
-	config: TimetableConfig = { lessonDuration: DEFAULT_SETTINGS.lessonDuration, studentBreakAfter: DEFAULT_SETTINGS.studentBreakAfter, teacherBreakAfter: DEFAULT_SETTINGS.teacherBreakAfter }
+	config: TimetableConfig = { lessonDuration: DEFAULT_SETTINGS.lessonDuration, studentBreakAfter: DEFAULT_SETTINGS.studentBreakAfter, teacherBreakAfter: DEFAULT_SETTINGS.teacherBreakAfter },
+	groupLessons: GroupLesson[] = [],
+	groupLessonsCount: Record<string, number> = {}
 ): { date: string; lessons: TimetableLesson[]; error?: string; warning?: string } {
 	const timetable: TimetableLesson[] = []
 	const studentLessonsCount: Record<string, number> = {}
@@ -1578,51 +1965,97 @@ function generateTimetableWithState(
 		teacherCooldown[t.name] = 0
 	})
 
+	// Initialize group lesson tracking (only for non-timetable timeScope, timetable is tracked in parent)
+	const localGroupLessonsCount: Record<string, number> = {}
+	const coupleLessonsCount: Record<string, number> = {}
+	if (groupLessons && Array.isArray(groupLessons)) {
+		groupLessons.forEach((g: GroupLesson) => {
+			// Only track locally for week/month/weekend timeScope
+			if (g.lessonsTarget.timeScope !== 'timetable') {
+				localGroupLessonsCount[g.groupName] = 0
+			}
+		})
+	}
+
 	// Build all possible lesson slots, skipping explicit breaks
 	const allSlots: { start: Date; end: Date; duration: number }[] = []
 	const dayStart = timeStringToDate(date, daySchedule.start)
 	const dayEnd = timeStringToDate(date, daySchedule.end)
-	let slotStart = dayStart
-
-	while (slotStart < dayEnd) {
-		const slotEnd = addMinutes(slotStart, config.lessonDuration)
-		if (slotEnd > dayEnd) break
-
-		// Check if this slot overlaps with any default break
-		const overlappingBreak = breaks.find((b) => {
-			if (!b || typeof b !== 'string') return false
-			const breakParts = b.split("-")
-			if (breakParts.length !== 2) return false
-			
+	
+	// Collect all availability windows from all teachers
+	const allAvailabilityWindows: Array<{ start: Date; end: Date }> = []
+	for (const teacher of teachers) {
+		for (const availability of teacher.availability) {
 			try {
-				const [bStart, bEnd] = breakParts
-				const breakStart = timeStringToDate(date, bStart.trim())
-				const breakEnd = timeStringToDate(date, bEnd.trim())
-				// Check if slot overlaps with break (either starts during break or ends during break)
-				return (slotStart < breakEnd && slotEnd > breakStart)
+				const [aStart, aEnd] = availability.split("-")
+				const startTime = timeStringToDate(date, aStart.trim())
+				const endTime = timeStringToDate(date, aEnd.trim())
+				if (startTime < endTime && startTime < dayEnd && endTime > dayStart) {
+					allAvailabilityWindows.push({
+						start: startTime < dayStart ? dayStart : startTime,
+						end: endTime > dayEnd ? dayEnd : endTime
+					})
+				}
 			} catch (err) {
-				console.warn(`Invalid break format: ${b}`, err)
-				return false
+				// Skip invalid availability windows
+				continue
 			}
-		})
-
-		if (overlappingBreak) {
-			// If slot overlaps with a break, skip to after the break ends
-			try {
-				const [bStart, bEnd] = overlappingBreak.split("-")
-				const breakEnd = timeStringToDate(date, bEnd.trim())
-				slotStart = breakEnd
-			} catch (err) {
-				console.warn(`Error parsing break end time: ${overlappingBreak}`, err)
-				// Skip this break and continue
-				slotStart = slotEnd
-			}
-		} else {
-			// Only add slots that don't overlap with breaks
-			allSlots.push({ start: slotStart, end: slotEnd, duration: config.lessonDuration })
-			slotStart = slotEnd
 		}
 	}
+	
+	// If no teacher availability found, use full day
+	if (allAvailabilityWindows.length === 0) {
+		allAvailabilityWindows.push({ start: dayStart, end: dayEnd })
+	}
+	
+	// Generate slots for each availability window
+	const slotMinutes = 15 // Use 15-minute increments for slot generation
+	for (const window of allAvailabilityWindows) {
+		let slotStart = window.start
+		
+		while (slotStart < window.end) {
+			const slotEnd = addMinutes(slotStart, config.lessonDuration)
+			if (slotEnd > window.end) break
+
+			// Check if this slot overlaps with any default break
+			const overlappingBreak = breaks.find((b) => {
+				if (!b || typeof b !== 'string') return false
+				const breakParts = b.split("-")
+				if (breakParts.length !== 2) return false
+				
+				try {
+					const [bStart, bEnd] = breakParts
+					const breakStart = timeStringToDate(date, bStart.trim())
+					const breakEnd = timeStringToDate(date, bEnd.trim())
+					// Check if slot overlaps with break (either starts during break or ends during break)
+					return (slotStart < breakEnd && slotEnd > breakStart)
+				} catch (err) {
+					return false
+				}
+			})
+
+			if (overlappingBreak) {
+				// If slot overlaps with a break, skip to after the break ends
+				try {
+					const [bStart, bEnd] = overlappingBreak.split("-")
+					const breakEnd = timeStringToDate(date, bEnd.trim())
+					slotStart = breakEnd
+				} catch (err) {
+					// Skip this break and continue
+					slotStart = addMinutes(slotStart, slotMinutes)
+				}
+			} else {
+				// Only add slots that don't overlap with breaks and fit within the window
+				if (slotStart >= window.start && slotEnd <= window.end) {
+					allSlots.push({ start: slotStart, end: slotEnd, duration: config.lessonDuration })
+				}
+				slotStart = addMinutes(slotStart, slotMinutes) // Use smaller increments for more flexibility
+			}
+		}
+	}
+	
+	// Sort slots by start time
+	allSlots.sort((a, b) => a.start.getTime() - b.start.getTime())
 
 	// Sort students by priority (high -> low), but also consider remaining lessons and teacher-specific needs
 	const prioritizedStudents = [...students].sort((a, b) => {
@@ -1650,8 +2083,301 @@ function generateTimetableWithState(
 		return bTeacherNeeds - aTeacherNeeds
 	})
 
-	// Schedule lessons
+	// Schedule group lessons first (highest priority)
+	for (const groupLesson of groupLessons) {
+		// Calculate target based on time scope
+		// Parse date as local time to avoid timezone issues
+		const dateObj = parse(date, 'yyyy-MM-dd', new Date())
+		const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
+		let shouldSchedule = false
+		
+		if (groupLesson.lessonsTarget.timeScope === 'weekend') {
+			// Only schedule on Saturday or Sunday
+			shouldSchedule = dayOfWeek === 'saturday' || dayOfWeek === 'sunday'
+		} else if (groupLesson.lessonsTarget.timeScope === 'week') {
+			// Schedule any day of the week
+			shouldSchedule = true
+		} else if (groupLesson.lessonsTarget.timeScope === 'month') {
+			// Schedule any day (monthly target will be distributed)
+			shouldSchedule = true
+		} else if (groupLesson.lessonsTarget.timeScope === 'timetable') {
+			// Schedule within the timetable date range
+			shouldSchedule = true
+		}
+		
+		if (!shouldSchedule) continue
+		
+		// Check if we've met the target for this group
+		// For timetable timeScope, use the cross-day count; for others, use local count
+		const countToCheck = groupLesson.lessonsTarget.timeScope === 'timetable' 
+			? (groupLessonsCount[groupLesson.groupName] || 0)
+			: (localGroupLessonsCount[groupLesson.groupName] || 0)
+		if (countToCheck >= groupLesson.lessonsTarget.count) {
+			continue
+		}
+
+		// Check if we have static time slot
+		if (groupLesson.staticTimeSlot) {
+			const staticDay = groupLesson.staticTimeSlot.dayOfWeek
+			// Use the same dateObj to ensure consistent day-of-week calculation
+			const currentDayName = dayOfWeek
+			
+			// Only schedule if the day matches
+			if (staticDay !== currentDayName) {
+				continue
+			}
+			
+			const { startTime, duration } = groupLesson.staticTimeSlot
+			const lessonDuration = duration || config.lessonDuration
+			const lessonStart = timeStringToDate(date, startTime)
+			const lessonEnd = addMinutes(lessonStart, lessonDuration)
+
+			// Check if static time is available
+			const isAvailable = !timetable.some(lesson =>
+				isOverlapping(lessonStart, lessonEnd, new Date(lesson.start), new Date(lesson.end))
+			)
+
+			if (isAvailable) {
+				// Check teacher availability
+				const availableTeacher = groupLesson.teachers.find(teacherName => {
+					const teacher = teachers.find(t => t.name === teacherName)
+					if (!teacher) return false
+
+					// Check teacher availability for this time
+					const isAvailable = teacher.availability.some((a) => {
+						const [aStart, aEnd] = a.split("-")
+						const startTime = timeStringToDate(date, aStart)
+						const endTime = timeStringToDate(date, aEnd)
+						return lessonStart >= startTime && lessonEnd <= endTime
+					}) && teacherCooldown[teacherName] === 0
+					
+					if (!isAvailable) return false
+					
+					// Check if teacher is already scheduled for another lesson at this time
+					const hasConflict = timetable.some((l) => {
+						if (!isOverlapping(lessonStart, lessonEnd, new Date(l.start), new Date(l.end))) {
+							return false
+						}
+						// Check if teacher is in an individual or couple lesson
+						if (l.teacher === teacherName) {
+							return true
+						}
+						// Check if teacher is in another group lesson
+						if (l.lessonType === 'group' && l.teachers && Array.isArray(l.teachers)) {
+							return l.teachers.includes(teacherName)
+						}
+						return false
+					})
+					
+					return !hasConflict
+				})
+
+				if (availableTeacher) {
+					// Check all participants are available
+					const allParticipantsAvailable = groupLesson.participants.every(couple =>
+						couple.availability.some((a) => {
+							const [aStart, aEnd] = a.split("-")
+							const startTime = timeStringToDate(date, aStart)
+							const endTime = timeStringToDate(date, aEnd)
+							return lessonStart >= startTime && lessonEnd <= endTime
+						}) &&
+						!timetable.some(lesson => {
+							if (!isOverlapping(lessonStart, lessonEnd, new Date(lesson.start), new Date(lesson.end))) {
+								return false
+							}
+							// Check if participant has an individual lesson
+							if (lesson.student === couple.name) {
+								return true
+							}
+							// Check if participant is in another couple lesson
+							if (lesson.couple === couple.name) {
+								return true
+							}
+							// Check if participant is in another group lesson
+							if (lesson.couples && Array.isArray(lesson.couples) && lesson.couples.includes(couple.name)) {
+								return true
+							}
+							return false
+						})
+					)
+
+					if (allParticipantsAvailable) {
+						// Schedule the group lesson
+						timetable.push({
+							start: lessonStart.toISOString(),
+							end: lessonEnd.toISOString(),
+							teachers: groupLesson.teachers,
+							teacher: availableTeacher, // primary teacher
+							couples: groupLesson.participants.map(p => p.name),
+							room: groupLesson.preferredRoom || teachers.find(t => t.name === availableTeacher)?.room || null,
+							type: "lesson",
+							lessonType: "group",
+							duration: lessonDuration,
+							groupName: groupLesson.groupName,
+							student: null,
+						})
+
+						// Update count based on timeScope
+						if (groupLesson.lessonsTarget.timeScope === 'timetable') {
+							groupLessonsCount[groupLesson.groupName] = (groupLessonsCount[groupLesson.groupName] || 0) + 1
+						} else {
+							localGroupLessonsCount[groupLesson.groupName] = (localGroupLessonsCount[groupLesson.groupName] || 0) + 1
+						}
+						teacherCooldown[availableTeacher] = 1 // Simple cooldown
+
+						// Update participant lesson counts
+						groupLesson.participants.forEach(couple => {
+							coupleLessonsCount[couple.name] = (coupleLessonsCount[couple.name] || 0) + 1
+						})
+					}
+				}
+			}
+		} else {
+			// Automatic scheduling - find available slot
+			for (const slot of allSlots) {
+				// Find available teacher
+				const availableTeacher = groupLesson.teachers.find(teacherName => {
+					const teacher = teachers.find(t => t.name === teacherName)
+					if (!teacher || teacherCooldown[teacherName] > 0) return false
+
+					const isAvailable = teacher.availability.some((a) => {
+						const [aStart, aEnd] = a.split("-")
+						const startTime = timeStringToDate(date, aStart)
+						const endTime = timeStringToDate(date, aEnd)
+						return slot.start >= startTime && slot.end <= endTime
+					})
+					
+					if (!isAvailable) return false
+					
+					// Check if teacher is already scheduled for another lesson at this time
+					const hasConflict = timetable.some((l) => {
+						if (!isOverlapping(slot.start, slot.end, new Date(l.start), new Date(l.end))) {
+							return false
+						}
+						// Check if teacher is in an individual or couple lesson
+						if (l.teacher === teacherName) {
+							return true
+						}
+						// Check if teacher is in another group lesson
+						if (l.lessonType === 'group' && l.teachers && Array.isArray(l.teachers)) {
+							return l.teachers.includes(teacherName)
+						}
+						return false
+					})
+					
+					return !hasConflict
+				})
+
+				if (availableTeacher) {
+					// Check all participants are available
+					const allParticipantsAvailable = groupLesson.participants.every(couple =>
+						couple.availability.some((a) => {
+							const [aStart, aEnd] = a.split("-")
+							const startTime = timeStringToDate(date, aStart)
+							const endTime = timeStringToDate(date, aEnd)
+							return slot.start >= startTime && slot.end <= endTime
+						}) &&
+						!timetable.some(lesson => {
+							if (!isOverlapping(slot.start, slot.end, new Date(lesson.start), new Date(lesson.end))) {
+								return false
+							}
+							// Check if participant has an individual lesson
+							if (lesson.student === couple.name) {
+								return true
+							}
+							// Check if participant is in another couple lesson
+							if (lesson.couple === couple.name) {
+								return true
+							}
+							// Check if participant is in another group lesson
+							if (lesson.couples && Array.isArray(lesson.couples) && lesson.couples.includes(couple.name)) {
+								return true
+							}
+							return false
+						})
+					)
+
+					if (allParticipantsAvailable) {
+						// Schedule the group lesson
+						timetable.push({
+							start: slot.start.toISOString(),
+							end: slot.end.toISOString(),
+							teachers: groupLesson.teachers,
+							teacher: availableTeacher,
+							couples: groupLesson.participants.map(p => p.name),
+							room: groupLesson.preferredRoom || teachers.find(t => t.name === availableTeacher)?.room || null,
+							type: "lesson",
+							lessonType: "group",
+							duration: slot.duration,
+							groupName: groupLesson.groupName,
+							student: null,
+						})
+
+						// Update count based on timeScope
+						if (groupLesson.lessonsTarget.timeScope === 'timetable') {
+							groupLessonsCount[groupLesson.groupName] = (groupLessonsCount[groupLesson.groupName] || 0) + 1
+						} else {
+							localGroupLessonsCount[groupLesson.groupName] = (localGroupLessonsCount[groupLesson.groupName] || 0) + 1
+						}
+						teacherCooldown[availableTeacher] = 1
+
+						// Update participant lesson counts
+						groupLesson.participants.forEach(couple => {
+							coupleLessonsCount[couple.name] = (coupleLessonsCount[couple.name] || 0) + 1
+						})
+
+						break // Found a slot, move to next group lesson
+					}
+				}
+			}
+		}
+	}
+
+	// Schedule individual/couple lessons
 	for (const slot of allSlots) {
+		// CRITICAL: Skip this slot if it conflicts with any group lesson static time slot
+		// Group lessons have absolute priority and should reserve their slots
+		const conflictsWithGroupLesson = groupLessons.some(groupLesson => {
+			if (!groupLesson.staticTimeSlot) return false
+			
+			// Check if this group lesson should be scheduled today
+			const dateObj = parse(date, 'yyyy-MM-dd', new Date())
+			const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
+			
+			// Check time scope
+			let shouldSchedule = false
+			if (groupLesson.lessonsTarget.timeScope === 'weekend') {
+				shouldSchedule = dayOfWeek === 'saturday' || dayOfWeek === 'sunday'
+			} else if (groupLesson.lessonsTarget.timeScope === 'week' || 
+			           groupLesson.lessonsTarget.timeScope === 'month' || 
+			           groupLesson.lessonsTarget.timeScope === 'timetable') {
+				shouldSchedule = true
+			}
+			
+			if (!shouldSchedule) return false
+			
+			// Check if day matches
+			if (groupLesson.staticTimeSlot.dayOfWeek !== dayOfWeek) return false
+			
+			// Check if we've met the target (for timetable timeScope, use cross-day count)
+			const countToCheck = groupLesson.lessonsTarget.timeScope === 'timetable' 
+				? (groupLessonsCount[groupLesson.groupName] || 0)
+				: (localGroupLessonsCount[groupLesson.groupName] || 0)
+			if (countToCheck >= groupLesson.lessonsTarget.count) return false
+			
+			// Check if this slot overlaps with the group lesson's static time
+			const { startTime, duration } = groupLesson.staticTimeSlot
+			const lessonDuration = duration || config.lessonDuration
+			const groupLessonStart = timeStringToDate(date, startTime)
+			const groupLessonEnd = addMinutes(groupLessonStart, lessonDuration)
+			
+			return isOverlapping(slot.start, slot.end, groupLessonStart, groupLessonEnd)
+		})
+		
+		if (conflictsWithGroupLesson) {
+			continue // Skip this slot - it's reserved for a group lesson
+		}
+		
 		// Decrement cooldowns
 		for (const t of Object.keys(teacherCooldown)) {
 			if (teacherCooldown[t] > 0) teacherCooldown[t]--
@@ -1668,6 +2394,23 @@ function generateTimetableWithState(
 				const endTime = timeStringToDate(date, aEnd)
 				return slot.start >= startTime && slot.end <= endTime
 			})) continue
+
+			// Check if teacher is already scheduled for another lesson at this time
+			const teacherConflict = timetable.some((l) => {
+				if (!isOverlapping(slot.start, slot.end, new Date(l.start), new Date(l.end))) {
+					return false
+				}
+				// Check if teacher is in an individual or couple lesson
+				if (l.teacher === teacher.name) {
+					return true
+				}
+				// Check if teacher is in a group lesson (via teachers array)
+				if (l.lessonType === 'group' && l.teachers && Array.isArray(l.teachers)) {
+					return l.teachers.includes(teacher.name)
+				}
+				return false
+			})
+			if (teacherConflict) continue
 
 			// Teacher max lessons
 			const teacherLessons = timetable.filter((l) => l.teacher === teacher.name).length
@@ -1753,7 +2496,6 @@ function generateTimetableWithState(
 					if (!hasDefaultBreak) {
 						const requiredBreakStart = new Date(lastLessonEnd.getTime() + config.lessonDuration * 60 * 1000)
 						if (slot.start.getTime() < requiredBreakStart.getTime()) {
-							console.log(`Teacher ${teacher.name} needs break - skipping slot at ${slot.start.toLocaleTimeString()}`)
 							continue // Teacher needs a break
 						}
 					} else {
@@ -1769,12 +2511,10 @@ function generateTimetableWithState(
 							if (breakTime) {
 								// Only allow lessons after the default break ends (allow lessons that start exactly when break ends)
 								if (slot.start.getTime() < breakTime.end.getTime()) {
-									console.log(`Teacher ${teacher.name} needs to wait for default break to end - skipping slot at ${slot.start.toLocaleTimeString()}`)
 									continue // Teacher needs to wait for break to end
 								}
 								
 								// If we're past the default break, allow the lesson (consecutive count is reset after break)
-								console.log(`Teacher ${teacher.name} can have lesson after default break at ${slot.start.toLocaleTimeString()}`)
 								// Don't continue - allow the lesson to be scheduled
 							}
 						}
@@ -1821,11 +2561,25 @@ function generateTimetableWithState(
 					return slot.start >= startTime && slot.end <= endTime
 				})) return false
 
-				// Check overlapping lessons
-				const conflict = timetable.some((l) =>
-					l.student === s.name &&
-					isOverlapping(slot.start, slot.end, new Date(l.start), new Date(l.end))
-				)
+				// Check overlapping lessons (both individual and group lessons)
+				const conflict = timetable.some((l) => {
+					if (!isOverlapping(slot.start, slot.end, new Date(l.start), new Date(l.end))) {
+						return false
+					}
+					// Check if student is in an individual lesson
+					if (l.student === s.name) {
+						return true
+					}
+					// Check if student is in a group lesson (via couples array)
+					if (l.lessonType === 'group' && l.couples && Array.isArray(l.couples)) {
+						return l.couples.includes(s.name)
+					}
+					// Check if student is in a couple lesson
+					if (l.lessonType === 'couple' && l.couple === s.name) {
+						return true
+					}
+					return false
+				})
 				if (conflict) return false
 
 				// Check if student has a consecutive break during this time slot
@@ -1892,7 +2646,6 @@ function generateTimetableWithState(
 						if (!hasDefaultBreak) {
 							const requiredBreakStart = new Date(lastLessonEnd.getTime() + config.lessonDuration * 60 * 1000)
 							if (slot.start.getTime() < requiredBreakStart.getTime()) {
-								console.log(`Student ${s.name} needs break - skipping slot at ${slot.start.toLocaleTimeString()}`)
 								return false
 							}
 						} else {
@@ -1911,12 +2664,10 @@ function generateTimetableWithState(
 								
 								// Only allow lessons after the default break ends (allow lessons that start exactly when break ends)
 								if (slot.start.getTime() < breakEnd.getTime()) {
-									console.log(`Student ${s.name} needs to wait for default break to end - skipping slot at ${slot.start.toLocaleTimeString()}`)
 									return false
 								}
 								
 								// If we're past the default break, allow the lesson (consecutive count is reset after break)
-								console.log(`Student ${s.name} can have lesson after default break at ${slot.start.toLocaleTimeString()}`)
 								// Don't return false here - allow the lesson to be scheduled
 							}
 						}
@@ -2003,7 +2754,6 @@ function generateTimetableWithState(
 								breakFor: "student", // Break is for the student
 								breakForName: availableStudent.name, // Name of the student
 							})
-							console.log(`Inserted break for ${availableStudent.name} from ${breakStart.toLocaleTimeString()} to ${breakEnd.toLocaleTimeString()}`)
 						}
 					}
 				}
@@ -2085,10 +2835,8 @@ function generateTimetableWithState(
 								breakFor: "teacher", // Break is for the teacher
 								breakForName: teacher.name, // Name of the teacher
 							})
-							console.log(`Inserted break for teacher ${teacher.name} from ${breakStart.toLocaleTimeString()} to ${breakEnd.toLocaleTimeString()}`)
 						}
 					} else {
-						console.log(`Teacher ${teacher.name} consecutive limit reached, but default break already exists at ${lastLessonEnd.toLocaleTimeString()}`)
 					}
 				}
 			}
@@ -2104,7 +2852,6 @@ function generateTimetableWithState(
 		const normalizedBreaks = breaks.map(b => {
 			const breakTime = parseBreakTime(b, date)
 			if (!breakTime) {
-				console.warn(`Skipping invalid break: ${b}`)
 				return null
 			}
 			return {
@@ -2115,26 +2862,29 @@ function generateTimetableWithState(
 		}).filter(Boolean)
 
 		normalizedBreaks.forEach(breakSlot => {
-	const existingBreak = timetable.some(lesson =>
-		lesson.type === "break" &&
-		lesson.start === breakSlot.start &&
-		lesson.end === breakSlot.end
-	)
+			if (!breakSlot) {
+				return
+			}
+			const existingBreak = timetable.some(lesson =>
+				lesson.type === "break" &&
+				lesson.start === breakSlot.start &&
+				lesson.end === breakSlot.end
+			)
 
-	if (!existingBreak) {
-		const breakEntry: TimetableLesson = {
-			start: breakSlot.start,
-			end: breakSlot.end,
-			teacher: null,
-			student: null,
-			room: null,
-			type: "break",
-			duration: breakSlot.duration,
-			breakType: "default", // Mark as default break
-		}
-		timetable.push(breakEntry)
-		} else {
-		}
+			if (!existingBreak) {
+				const breakEntry: TimetableLesson = {
+					start: breakSlot.start,
+					end: breakSlot.end,
+					teacher: null,
+					student: null,
+					room: null,
+					type: "break",
+					duration: breakSlot.duration,
+					breakType: "default", // Mark as default break
+				}
+				timetable.push(breakEntry)
+				} else {
+			}
 		})
 	}
 
@@ -2151,18 +2901,6 @@ function generateTimetableWithState(
 	const dedupedLessons = dedupeBreakEntries(sortedLessons)
 
 const evaluation = evaluateUnmetStudents(students, studentProgressForDay, studentTeacherLessonsCount)
-	if (evaluation.warning) {
-		console.log('Scheduling Summary:', {
-			totalSlots: allSlots.length,
-			totalLessons: dedupedLessons.filter(l => l.type === 'lesson').length,
-			studentProgress: Object.entries(studentLessonsCount).map(([name, count]) => ({
-				name,
-				scheduled: count,
-				desired: students.find(s => s.name === name)?.desiredLessons || 0,
-				teacherLessons: studentTeacherLessonsCount[name]
-			}))
-		})
-	}
 
 	// Timetable generation completed
 	return {

@@ -3,6 +3,7 @@
 import { useEffect, useState, ComponentType } from 'react'
 import { useOnboarding } from '@/context/OnboardingContext'
 import { useLoading } from '@/context/LoadingContext'
+import { useAuth } from '@/context/AuthContext'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import axios from 'axios'
 import { showAlertToast } from '@/components/toast/Toast'
@@ -75,6 +76,7 @@ const stepDefinitions: StepDefinition[] = [
 export default function OnboardingSteps() {
 	const { step, setStep, initialized, userData, saveUserDataToDB } = useOnboarding()
 	const { isLoading, showLoader, hideLoader } = useLoading()
+	const { refreshUser } = useAuth()
 	const router = useRouter()
 
 	const [isStepValid, setIsStepValid] = useState(false)
@@ -112,7 +114,7 @@ export default function OnboardingSteps() {
 	)
 
 	const totalSteps = newUserData.role ? progressBarSteps.length : 2
-	const currentStep = userData.role ? filteredSteps[step] : step === 0 ? filteredSteps[0] : filteredSteps[1]
+	const currentStep = newUserData.role ? filteredSteps[step] : step === 0 ? filteredSteps[0] : filteredSteps[1]
 
 	if(!currentStep) return null
 
@@ -131,7 +133,20 @@ export default function OnboardingSteps() {
 		setStep((s) => Math.min(s + 1, filteredSteps.length - 1))
 	}
 
-	const back = () => setStep((s) => Math.max(s - 1, 0))
+	const back = () => {
+		const newStep = Math.max(step - 1, 0)
+		// If going back to trainerChoice step, reset the createNewClub selection
+		if (newUserData.role === 'trainer' && newStep < filteredSteps.length) {
+			const stepAtNewIndex = filteredSteps[newStep]
+			if (stepAtNewIndex?.key === 'trainerChoice' && newUserData.createNewClub !== null) {
+				setNewUserData((prev) => ({
+					...prev,
+					createNewClub: null,
+				}))
+			}
+		}
+		setStep(newStep)
+	}
 
 	const isActualFinalStep = () => {
 		if (newUserData.role === 'student') return currentStep.key === 'studentJoin'
@@ -158,6 +173,7 @@ export default function OnboardingSteps() {
 					clubCode: newUserData.clubCode,
 					userId: userData._id,
 				})
+				await refreshUser()
 			} else if (newUserData.role === 'trainer') {
 
 				if (newUserData.createNewClub) {
@@ -166,12 +182,13 @@ export default function OnboardingSteps() {
 						clubName: newUserData.clubName,
 						description: newUserData.clubDescription,
 					})
-
+					await refreshUser()
 				} else if (newUserData.clubCode) {
 					await axios.post('/api/clubs/join', {
 						clubCode: newUserData.clubCode,
 						userId: userData._id,
 					})
+					await refreshUser()
 				}
 			}
 

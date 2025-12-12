@@ -11,6 +11,7 @@ interface User {
 	lastName?: string
 	email?: string
 	role?: 'student' | 'trainer' | 'admin'
+	clubId?: string
 	onboardingStep?: number
 }
 
@@ -34,8 +35,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 	const refreshUser = async () => {
 		try {
 			const { data } = await axios.get('/api/users/me')
-			setUser(data.user)
-			localStorage.setItem('dancehub_USER', JSON.stringify(data.user))
+			const normalizedUser: User | null = data.user
+				? {
+					...data.user,
+					clubId: data.user.clubId ? data.user.clubId.toString() : undefined,
+				}
+				: null
+			setUser(normalizedUser)
+			localStorage.setItem('dancehub_USER', JSON.stringify(normalizedUser))
 		} catch (err) {
 			console.error('Failed to fetch user', err)
 			setUser(null)
@@ -46,7 +53,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 	useEffect(() => {
 		const storedUser = localStorage.getItem('dancehub_USER')
 		if (storedUser && storedUser !== 'undefined') {
-			refreshUser()
+			try {
+				const parsed = JSON.parse(storedUser)
+				setUser(parsed)
+			} catch {
+				refreshUser()
+			}
 		}
 	}, [])
 
@@ -58,8 +70,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 			const { data } = await axios.post('/api/auth/login', { email, password })
 
 			if (data.status === 'success' && data.user) {
-				setUser(data.user)
-				localStorage.setItem('dancehub_USER', JSON.stringify(data.user))
+				const normalizedUser: User = {
+					...data.user,
+					clubId: data.user.clubId ? data.user.clubId.toString() : undefined,
+				}
+				setUser(normalizedUser)
+				localStorage.setItem('dancehub_USER', JSON.stringify(normalizedUser))
 				showAlertToast('Login successful!', { variant: 'success', title: 'Success' })
 
 				if (data.user.onboardingStep === 4) {
