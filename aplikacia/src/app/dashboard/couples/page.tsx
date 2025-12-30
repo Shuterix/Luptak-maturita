@@ -466,116 +466,165 @@ export default function CouplesPage() {
 								: 'No couples match the current filters.'}
 						</p>
 					) : (
-						<div className="overflow-x-auto">
-							<table className="table table-zebra">
-								<thead>
-									<tr>
-										<th>
-											<button
-												className="flex items-center gap-1 hover:text-primary"
-												onClick={() => handleSort('partnerA')}
-											>
-												Partner A
-												{sortConfig.key === 'partnerA' && (
-													<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-												)}
-											</button>
-										</th>
-										<th>
-											<button
-												className="flex items-center gap-1 hover:text-primary"
-												onClick={() => handleSort('partnerB')}
-											>
-												Partner B
-												{sortConfig.key === 'partnerB' && (
-													<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-												)}
-											</button>
-										</th>
-										<th>
-											<button
-												className="flex items-center gap-1 hover:text-primary"
-												onClick={() => handleSort('baseGroup')}
-											>
-												Base Group
-												{sortConfig.key === 'baseGroup' && (
-													<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-												)}
-											</button>
-										</th>
-										<th>
-											<button
-												className="flex items-center gap-1 hover:text-primary"
-												onClick={() => handleSort('teacher')}
-											>
-												Preferred Teacher
-												{sortConfig.key === 'teacher' && (
-													<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-												)}
-											</button>
-										</th>
-										<th>Actions</th>
-									</tr>
-								</thead>
-								<tbody>
-									{filteredAndSortedPairs.map((pair) => (
-										<tr key={pair._id}>
-											<td>{getStudentName(pair.studentAId)}</td>
-											<td>{getStudentName(pair.studentBId)}</td>
-											<td>
-												{pair.baseGroup ? (
-													<span className="badge badge-outline">{pair.baseGroup}</span>
-												) : (
-													<span className="text-base-content/40">—</span>
-												)}
-											</td>
-											<td>
-												{pair.preferredTeacherId ? (
-													`${pair.preferredTeacherId.firstName} ${pair.preferredTeacherId.lastName}`
-												) : (
-													<span className="text-base-content/40">—</span>
-												)}
-											</td>
-											<td>
-												<div className="flex gap-2">
-													<Button className="btn-ghost btn-sm" onClick={() => handleOpenModal(pair)}>
-														Edit
-													</Button>
-													<Button
-														className="btn-ghost btn-sm text-error"
-														onClick={() => handleDeleteClick(pair)}
-														disabled={deletingId === pair._id}
-													>
-														{deletingId === pair._id ? (
-															<span className="loading loading-spinner loading-xs"></span>
-														) : (
-															'Delete'
-														)}
-													</Button>
+						<>
+							{/* Mobile Card View */}
+							<div className="grid gap-3 sm:hidden">
+								{filteredAndSortedPairs.map((pair) => (
+									<div key={pair._id} className="bg-base-100 rounded-xl border border-base-300 p-4 space-y-3">
+										<div className="flex items-start justify-between">
+											<div>
+												<p className="font-semibold text-base-content">
+													{getStudentName(pair.studentAId)} & {getStudentName(pair.studentBId)}
+												</p>
+												<div className="flex flex-wrap gap-2 mt-2">
+													{pair.baseGroup && (
+														<span className="badge badge-outline badge-sm">{pair.baseGroup}</span>
+													)}
+													{pair.preferredTeacherId && (
+														<span className="badge badge-ghost badge-sm">
+															{pair.preferredTeacherId.firstName} {pair.preferredTeacherId.lastName}
+														</span>
+													)}
 												</div>
-											</td>
+											</div>
+										</div>
+										<div className="flex gap-2 pt-2 border-t border-base-200">
+											<Button className="btn-ghost btn-sm flex-1" onClick={() => handleOpenModal(pair)}>
+												Edit
+											</Button>
+											<Button
+												className="btn-ghost btn-sm flex-1 text-error"
+												onClick={() => handleDeleteClick(pair)}
+												disabled={deletingId === pair._id}
+											>
+												{deletingId === pair._id ? (
+													<span className="loading loading-spinner loading-xs"></span>
+												) : (
+													'Delete'
+												)}
+											</Button>
+										</div>
+									</div>
+								))}
+							</div>
+
+							{/* Desktop Table View */}
+							<div className="overflow-x-auto hidden sm:block">
+								<table className="table table-zebra">
+									<thead>
+										<tr>
+											<th>
+												<button
+													className="flex items-center gap-1 hover:text-primary"
+													onClick={() => handleSort('partnerA')}
+												>
+													Partner A
+													{sortConfig.key === 'partnerA' && (
+														<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+													)}
+												</button>
+											</th>
+											<th>
+												<button
+													className="flex items-center gap-1 hover:text-primary"
+													onClick={() => handleSort('partnerB')}
+												>
+													Partner B
+													{sortConfig.key === 'partnerB' && (
+														<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+													)}
+												</button>
+											</th>
+											<th>
+												<button
+													className="flex items-center gap-1 hover:text-primary"
+													onClick={() => handleSort('baseGroup')}
+												>
+													Base Group
+													{sortConfig.key === 'baseGroup' && (
+														<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+													)}
+												</button>
+											</th>
+											<th>
+												<button
+													className="flex items-center gap-1 hover:text-primary"
+													onClick={() => handleSort('teacher')}
+												>
+													Preferred Teacher
+													{sortConfig.key === 'teacher' && (
+														<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+													)}
+												</button>
+											</th>
+											<th>Actions</th>
 										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
+									</thead>
+									<tbody>
+										{filteredAndSortedPairs.map((pair) => (
+											<tr key={pair._id}>
+												<td>{getStudentName(pair.studentAId)}</td>
+												<td>{getStudentName(pair.studentBId)}</td>
+												<td>
+													{pair.baseGroup ? (
+														<span className="badge badge-outline">{pair.baseGroup}</span>
+													) : (
+														<span className="text-base-content/40">—</span>
+													)}
+												</td>
+												<td>
+													{pair.preferredTeacherId ? (
+														`${pair.preferredTeacherId.firstName} ${pair.preferredTeacherId.lastName}`
+													) : (
+														<span className="text-base-content/40">—</span>
+													)}
+												</td>
+												<td>
+													<div className="flex gap-2">
+														<Button className="btn-ghost btn-sm" onClick={() => handleOpenModal(pair)}>
+															Edit
+														</Button>
+														<Button
+															className="btn-ghost btn-sm text-error"
+															onClick={() => handleDeleteClick(pair)}
+															disabled={deletingId === pair._id}
+														>
+															{deletingId === pair._id ? (
+																<span className="loading loading-spinner loading-xs"></span>
+															) : (
+																'Delete'
+															)}
+														</Button>
+													</div>
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						</>
 					)}
 				</div>
 			</div>
 
 			{isModalOpen && (
-				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-					<div className="w-full max-w-lg rounded-2xl bg-base-200 shadow-2xl border border-base-300">
-						<div className="flex items-center justify-between border-b border-base-300 px-6 py-4">
+				<div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4">
+					<div className="w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl bg-base-200 shadow-2xl border border-base-300 max-h-[90vh] flex flex-col">
+						{/* Mobile drag indicator */}
+						<div className="flex justify-center pt-2 sm:hidden">
+							<div className="w-12 h-1.5 bg-base-300 rounded-full" />
+						</div>
+						
+						<div className="flex items-center justify-between border-b border-base-300 px-4 sm:px-6 py-3 sm:py-4">
 							<h3 className="text-lg font-semibold text-base-content">
 								{editingPair ? 'Edit Couple' : 'Create Couple'}
 							</h3>
-							<button type="button" className="btn btn-ghost btn-sm" onClick={handleCloseModal}>
+							<button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={handleCloseModal}>
 								✕
 							</button>
 						</div>
 
-						<form onSubmit={handleSubmit} className="p-6 space-y-4">
+						<form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
 							<div className="form-control">
 								<label className="label">
 									<span className="label-text">Partner A</span>

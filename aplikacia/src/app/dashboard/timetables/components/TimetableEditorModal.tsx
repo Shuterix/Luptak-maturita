@@ -805,10 +805,16 @@ export function TimetableEditorModal({
 	const currentStepIndex = stepsConfig.findIndex((step) => step.id === currentStep)
 
 	return (
-		<div className="fixed inset-0 bg-base-content/60 backdrop-blur-sm flex items-center justify-center z-50">
-			<div className="bg-base-200 text-base-content rounded-2xl shadow-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-base-300">
-				<div className="flex justify-between items-center mb-6">
-					<h2 className="text-xl font-bold text-base-content">Group Lesson Configuration</h2>
+		<div className="fixed inset-0 bg-base-content/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
+			<div className="bg-base-200 text-base-content rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden border border-base-300 flex flex-col">
+				{/* Mobile drag indicator */}
+				<div className="flex justify-center pt-2 sm:hidden">
+					<div className="w-12 h-1.5 bg-base-300 rounded-full" />
+				</div>
+				
+				{/* Header - sticky on mobile */}
+				<div className="flex justify-between items-center p-4 sm:p-6 pb-2 sm:pb-6 border-b border-base-300 sm:border-0">
+					<h2 className="text-lg sm:text-xl font-bold text-base-content">Group Lesson Config</h2>
 					<button
 						onClick={onClose}
 						className="btn btn-ghost btn-sm btn-circle text-base-content/70 hover:text-base-content"
@@ -817,172 +823,190 @@ export function TimetableEditorModal({
 					</button>
 				</div>
 
-				{/* Progress indicator */}
-				<div className="mb-6 space-y-4">
-					<div className="flex flex-wrap items-center justify-between gap-2 text-sm text-base-content/70">
-						<span>
-							Step {getStepProgress()} of {stepsConfig.length}
-						</span>
-						<span>
-							{groupLessons.length} group{groupLessons.length === 1 ? '' : 's'} configured
-						</span>
-					</div>
-					<ul className="steps steps-horizontal w-full overflow-x-auto">
-						{stepsConfig.map((step, index) => {
-							const isDone = index < currentStepIndex
-							const isCurrent = index === currentStepIndex
-							return (
-								<li
-									key={step.id}
-									className={`step ${isDone || isCurrent ? 'step-primary' : ''}`}
-									data-content={isDone ? '✓' : index + 1}
-								>
-									<div className="mt-2 flex flex-col items-center gap-1 text-center">
-										<span className="text-xs font-semibold uppercase tracking-wide text-base-content/70">
-											{step.title}
-										</span>
-										<span className="text-[11px] text-base-content/40">{step.description}</span>
-									</div>
-								</li>
-							)
-						})}
-					</ul>
-				</div>
-
-				{/* Step content */}
-				<div className="mb-6">
-					{renderStepContent()}
-				</div>
-
-				{/* Navigation buttons */}
-				<div className="flex flex-wrap items-center justify-between gap-3">
-					<Button onClick={handleBack} disabled={currentStep === 'group-selection'} variant="secondary">
-						Back
-					</Button>
-
-					<div className="flex items-center gap-2">
-						{/* Show Save button on first step if there are configured groups */}
-						{currentStep === 'group-selection' && groupLessons.length > 0 && (
-							<Button onClick={handleSave} variant="primary">
-								Save & Close
-							</Button>
-						)}
-						{(currentStep === 'settings' || currentStep === 'review') && (
-							<Button onClick={handleSave} variant="primary">
-								Save all groups
-							</Button>
-						)}
-						<Button
-							onClick={handleNext}
-							disabled={
-								(currentStep === 'group-selection' && !formData.groupName) ||
-								(currentStep === 'teacher-assignment' && formData.selectedTeachers.length === 0) ||
-								(currentStep === 'participants' && formData.selectedParticipants.length === 0)
-							}
-							className="btn-primary"
-						>
-							{currentStep === 'review'
-								? 'Save group & add another'
-								: currentStep === 'settings'
-									? 'Review'
-									: 'Next'}
-						</Button>
-					</div>
-				</div>
-
-				{/* Group lessons summary */}
-				{groupLessons.length > 0 && (
-					<div className="mt-6 pt-6 border-t border-base-300">
-						<div className="flex items-center justify-between mb-3">
-							<h4 className="font-medium text-base-content">Configured Groups:</h4>
-							<Button onClick={handleSave} size="sm" variant="primary">
-								Save & Close
-							</Button>
+				{/* Scrollable content */}
+				<div className="flex-1 overflow-y-auto p-4 sm:p-6 pt-2 sm:pt-0">
+					{/* Progress indicator */}
+					<div className="mb-6 space-y-4">
+						<div className="flex flex-wrap items-center justify-between gap-2 text-sm text-base-content/70">
+							<span>
+								Step {getStepProgress()} of {stepsConfig.length}
+							</span>
+							<span>
+								{groupLessons.length} group{groupLessons.length === 1 ? '' : 's'} configured
+							</span>
 						</div>
-						<div className="space-y-2">
-							{groupLessons.map((group, index) => (
-								<div key={index} className="flex justify-between items-center p-3 rounded-xl border border-base-300 bg-accent/20 hover:bg-accent/30 transition-colors">
-									<div className="flex flex-col gap-1">
-										<span className="font-medium text-base-content">{group.groupName}</span>
-										<span className="text-xs text-base-content/70">
-											{group.lessonsTarget?.count ?? 0}× per {group.lessonsTarget?.timeScope ?? 'week'}
-											{' · '}{group.duration ?? 45} min
-											{group.staticTimeSlot && (
-												<> · {group.staticTimeSlot.dayOfWeek.charAt(0).toUpperCase() + group.staticTimeSlot.dayOfWeek.slice(1)} {group.staticTimeSlot.startTime}</>
-											)}
-											{!group.staticTimeSlot && group.distributeAcrossDays && (
-												<> · <span className="text-success">distributed</span></>
-											)}
-										</span>
-									</div>
-									<div className="flex gap-2">
-										<Button
-											onClick={() => {
-												setCurrentGroupIndex(index)
-												setFormData({
-													groupName: group.groupName,
-													lessonsTarget: group.lessonsTarget || {
-														count: 1,
-														timeScope: 'week' as 'weekend' | 'week' | 'month' | 'timetable',
-													},
-													selectedTeachers: group.teachers,
-													staticTimeSlot: group.staticTimeSlot ? {
-														dayOfWeek: group.staticTimeSlot.dayOfWeek,
-														startTime: group.staticTimeSlot.startTime,
-														enabled: true,
-													} : {
-														dayOfWeek: 'monday',
-														startTime: '17:00',
-														enabled: false,
-													},
-													duration: group.duration ?? group.staticTimeSlot?.duration ?? 45,
-													distributeAcrossDays: group.distributeAcrossDays ?? true,
-													selectedParticipants: group.participants,
-													preferredRoom: group.preferredRoom || '',
-													notes: group.notes || '',
-												})
-												setCurrentStep('group-selection')
-											}}
-											variant="secondary"
-											size="sm"
-										>
-											Edit
-										</Button>
-										<Button
-											onClick={() => {
-												const updatedGroups = groupLessons.filter((_, i) => i !== index)
-												setGroupLessons(updatedGroups)
-												// If we were editing this group, reset form
-												if (currentGroupIndex === index) {
-													setCurrentGroupIndex(updatedGroups.length)
-													setFormData({
-														groupName: '',
-														lessonsTarget: { count: 1, timeScope: 'week' as const },
-														selectedTeachers: [],
-														staticTimeSlot: { dayOfWeek: 'monday', startTime: '17:00', enabled: false },
-														duration: 45,
-														distributeAcrossDays: true,
-														selectedParticipants: [],
-														preferredRoom: '',
-														notes: '',
-													})
-												} else if (currentGroupIndex > index) {
-													// Adjust index if we're editing a group after the removed one
-													setCurrentGroupIndex(currentGroupIndex - 1)
-												}
-											}}
-											variant="ghost"
-											size="sm"
-											className="text-error hover:bg-error/20"
-										>
-											Remove
-										</Button>
-									</div>
+						{/* Simplified progress on mobile */}
+						<div className="sm:hidden">
+							<div className="flex items-center gap-2">
+								<div className="flex-1 bg-base-300 rounded-full h-2">
+									<div 
+										className="bg-primary h-2 rounded-full transition-all" 
+										style={{ width: `${(currentStepIndex + 1) / stepsConfig.length * 100}%` }}
+									/>
 								</div>
-							))}
+								<span className="text-xs font-medium">{stepsConfig[currentStepIndex]?.title}</span>
+							</div>
+						</div>
+						{/* Full steps indicator on desktop */}
+						<ul className="steps steps-horizontal w-full overflow-x-auto hidden sm:flex">
+							{stepsConfig.map((step, index) => {
+								const isDone = index < currentStepIndex
+								const isCurrent = index === currentStepIndex
+								return (
+									<li
+										key={step.id}
+										className={`step ${isDone || isCurrent ? 'step-primary' : ''}`}
+										data-content={isDone ? '✓' : index + 1}
+									>
+										<div className="mt-2 flex flex-col items-center gap-1 text-center">
+											<span className="text-xs font-semibold uppercase tracking-wide text-base-content/70">
+												{step.title}
+											</span>
+											<span className="text-[11px] text-base-content/40">{step.description}</span>
+										</div>
+									</li>
+								)
+							})}
+						</ul>
+					</div>
+
+					{/* Step content */}
+					<div className="mb-6">
+						{renderStepContent()}
+					</div>
+
+					{/* Group lessons summary */}
+					{groupLessons.length > 0 && (
+						<div className="mt-6 pt-6 border-t border-base-300">
+							<div className="flex items-center justify-between mb-3">
+								<h4 className="font-medium text-base-content">Configured Groups:</h4>
+								<Button onClick={handleSave} size="sm" variant="primary" className="hidden sm:flex">
+									Save & Close
+								</Button>
+							</div>
+							<div className="space-y-2">
+								{groupLessons.map((group, index) => (
+									<div key={index} className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 p-3 rounded-xl border border-base-300 bg-accent/20 hover:bg-accent/30 transition-colors">
+										<div className="flex flex-col gap-1">
+											<span className="font-medium text-base-content">{group.groupName}</span>
+											<span className="text-xs text-base-content/70">
+												{group.lessonsTarget?.count ?? 0}× per {group.lessonsTarget?.timeScope ?? 'week'}
+												{' · '}{group.duration ?? 45} min
+												{group.staticTimeSlot && (
+													<> · {group.staticTimeSlot.dayOfWeek.charAt(0).toUpperCase() + group.staticTimeSlot.dayOfWeek.slice(1)} {group.staticTimeSlot.startTime}</>
+												)}
+												{!group.staticTimeSlot && group.distributeAcrossDays && (
+													<> · <span className="text-success">distributed</span></>
+												)}
+											</span>
+										</div>
+										<div className="flex gap-2">
+											<Button
+												onClick={() => {
+													setCurrentGroupIndex(index)
+													setFormData({
+														groupName: group.groupName,
+														lessonsTarget: group.lessonsTarget || {
+															count: 1,
+															timeScope: 'week' as 'weekend' | 'week' | 'month' | 'timetable',
+														},
+														selectedTeachers: group.teachers,
+														staticTimeSlot: group.staticTimeSlot ? {
+															dayOfWeek: group.staticTimeSlot.dayOfWeek,
+															startTime: group.staticTimeSlot.startTime,
+															enabled: true,
+														} : {
+															dayOfWeek: 'monday',
+															startTime: '17:00',
+															enabled: false,
+														},
+														duration: group.duration ?? group.staticTimeSlot?.duration ?? 45,
+														distributeAcrossDays: group.distributeAcrossDays ?? true,
+														selectedParticipants: group.participants,
+														preferredRoom: group.preferredRoom || '',
+														notes: group.notes || '',
+													})
+													setCurrentStep('group-selection')
+												}}
+												variant="secondary"
+												size="sm"
+											>
+												Edit
+											</Button>
+											<Button
+												onClick={() => {
+													const updatedGroups = groupLessons.filter((_, i) => i !== index)
+													setGroupLessons(updatedGroups)
+													// If we were editing this group, reset form
+													if (currentGroupIndex === index) {
+														setCurrentGroupIndex(updatedGroups.length)
+														setFormData({
+															groupName: '',
+															lessonsTarget: { count: 1, timeScope: 'week' as const },
+															selectedTeachers: [],
+															staticTimeSlot: { dayOfWeek: 'monday', startTime: '17:00', enabled: false },
+															duration: 45,
+															distributeAcrossDays: true,
+															selectedParticipants: [],
+															preferredRoom: '',
+															notes: '',
+														})
+													} else if (currentGroupIndex > index) {
+														// Adjust index if we're editing a group after the removed one
+														setCurrentGroupIndex(currentGroupIndex - 1)
+													}
+												}}
+												variant="ghost"
+												size="sm"
+												className="text-error hover:bg-error/20"
+											>
+												Remove
+											</Button>
+										</div>
+									</div>
+								))}
+							</div>
+						</div>
+					)}
+				</div>
+
+				{/* Sticky Navigation Footer */}
+				<div className="sticky bottom-0 bg-base-200 border-t border-base-300 p-4 sm:p-6 pt-4">
+					<div className="flex flex-wrap items-center justify-between gap-3">
+						<Button onClick={handleBack} disabled={currentStep === 'group-selection'} variant="secondary" className="flex-1 sm:flex-none">
+							Back
+						</Button>
+
+						<div className="flex items-center gap-2 flex-1 sm:flex-none justify-end">
+							{/* Show Save button on first step if there are configured groups */}
+							{currentStep === 'group-selection' && groupLessons.length > 0 && (
+								<Button onClick={handleSave} variant="primary" className="flex-1 sm:flex-none">
+									Save & Close
+								</Button>
+							)}
+							{(currentStep === 'settings' || currentStep === 'review') && (
+								<Button onClick={handleSave} variant="primary" className="hidden sm:flex">
+									Save all groups
+								</Button>
+							)}
+							<Button
+								onClick={handleNext}
+								disabled={
+									(currentStep === 'group-selection' && !formData.groupName) ||
+									(currentStep === 'teacher-assignment' && formData.selectedTeachers.length === 0) ||
+									(currentStep === 'participants' && formData.selectedParticipants.length === 0)
+								}
+								className="btn-primary flex-1 sm:flex-none"
+							>
+								{currentStep === 'review'
+									? 'Save & add'
+									: currentStep === 'settings'
+										? 'Review'
+										: 'Next'}
+							</Button>
 						</div>
 					</div>
-				)}
+				</div>
 			</div>
 		</div>
 	)

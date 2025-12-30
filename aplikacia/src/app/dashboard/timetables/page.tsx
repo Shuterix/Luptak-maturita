@@ -21,6 +21,8 @@ import { TimetableConfigModal } from './components/TimetableConfigModal'
 import { SchedulerConfigModal } from './components/SchedulerConfigModal'
 import { CreateTimetableModal } from './components/CreateTimetableModal'
 import { AddStaticLessonModal } from './components/AddStaticLessonModal'
+import MobileDaySelector from './components/MobileDaySelector'
+import { useIsMobile } from '@/hooks/useMediaQuery'
 
 type TimetableType = 'weekly' | 'yearly' | 'after_school' | 'camp' | 'custom'
 type LessonType = 'group' | 'individual' | 'couple'
@@ -461,6 +463,10 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 	const [overwriteConfirmTimetable, setOverwriteConfirmTimetable] = useState<TimetableRecord | null>(null)
 	const [showNewNameInput, setShowNewNameInput] = useState(false)
 	const [newTimetableName, setNewTimetableName] = useState('')
+
+	// Mobile responsive states
+	const [mobileSelectedDate, setMobileSelectedDate] = useState<string | null>(null)
+	const isMobile = useIsMobile()
 
 	const canSubmit = useMemo(() => {
 		// Basic validation: user must be logged in and have club, and name must be provided
@@ -1612,6 +1618,26 @@ const handleGenerateAutomaticSchedule = () => {
 			})
 	}, [lessons])
 
+	// Available dates for mobile day selector
+	const availableDates = useMemo(() => {
+		return lessonsByDate.map(({ date }) => date)
+	}, [lessonsByDate])
+
+	// Set initial mobile selected date when lessons change
+	useEffect(() => {
+		if (availableDates.length > 0 && !mobileSelectedDate) {
+			setMobileSelectedDate(availableDates[0])
+		} else if (availableDates.length > 0 && mobileSelectedDate && !availableDates.includes(mobileSelectedDate)) {
+			setMobileSelectedDate(availableDates[0])
+		}
+	}, [availableDates, mobileSelectedDate])
+
+	// Filtered lessons for mobile (only selected date)
+	const mobileLessonsByDate = useMemo(() => {
+		if (!mobileSelectedDate) return lessonsByDate
+		return lessonsByDate.filter(({ date }) => date === mobileSelectedDate)
+	}, [lessonsByDate, mobileSelectedDate])
+
 	// Helper to convert unavailability to display string
 	const convertUnavailabilityToString = (unavailability: any): string => {
 		if (!unavailability) return 'Available anytime'
@@ -2537,17 +2563,26 @@ return (
 
 				{!showTimetableFullscreen && (
 					<div className="space-y-4">
+						{/* Mobile Day Selector */}
+						{isMobile && availableDates.length > 1 && mobileSelectedDate && (
+							<MobileDaySelector
+								dates={availableDates}
+								selectedDate={mobileSelectedDate}
+								onDateChange={setMobileSelectedDate}
+							/>
+						)}
+						
 						{lessonsByDate.length === 0 ? (
 							<p className="text-sm text-base-content/60">No lessons scheduled yet.</p>
 						) : (
-							lessonsByDate.map(({ date, rows }) => {
+							(isMobile ? mobileLessonsByDate : lessonsByDate).map(({ date, rows }) => {
 									const totalForDay = rows.reduce((acc, row) => acc + row.lessons.length, 0)
 									return (
 										<div key={date} className="rounded-xl border border-base-300 bg-base-200/70 shadow-sm">
 											<div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3 bg-base-300/50">
 												<div>
 													<p className="text-sm font-semibold text-base-content">{formatFriendlyDate(date)}</p>
-													<p className="text-xs text-base-content/70">{date}</p>
+													<p className="text-xs text-base-content/70 hidden sm:block">{date}</p>
 					</div>
 												<span className="badge badge-sm badge-outline badge-primary">
 													{totalForDay} lesson{totalForDay === 1 ? '' : 's'}
