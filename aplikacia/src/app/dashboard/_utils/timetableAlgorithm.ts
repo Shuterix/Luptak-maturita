@@ -1701,10 +1701,13 @@ const studentState: Record<string, {
 	lastTeacher: string | null
 	lastLessonTime: string | null
 }> = {}
+	// Track lessons scheduled per day per student (for distribution logic)
+	const studentLessonsPerDay: Record<string, Record<number, number>> = {} // student -> dayIndex -> count
 	
 	students.forEach(s => {
 		studentProgress[s.name] = { scheduled: 0, desired: s.desiredLessons }
 		studentTeacherProgress[s.name] = {}
+		studentLessonsPerDay[s.name] = {}
 		teachers.forEach(t => {
 			studentTeacherProgress[s.name][t.name] = 0
 		})
@@ -1839,46 +1842,8 @@ const studentState: Record<string, {
 						const dayPositionInCycle = scheduledDays.indexOf(dayIndex)
 						const totalLessonsForThisDay = lessonsPerDayBase + (dayPositionInCycle < extraLessons ? 1 : 0)
 						
-						// Calculate how many lessons have been scheduled on this day so far
-						// In cycle 0, we schedule 1 lesson per scheduled day
-						// In cycle 1+, we schedule additional lessons on days that need them
-						
-						// Estimate lessons scheduled on this day:
-						// - If we're in cycle 0: check if we've passed this day position
-						// - If we're in cycle 1+: we've scheduled at least 1 lesson (from cycle 0)
-						//   and possibly more if this day needs extra lessons
-						let lessonsScheduledOnThisDay = 0
-						
-						if (cycleNumber === 0) {
-							// In cycle 0, we schedule 1 lesson per scheduled day
-							// Check if we've already scheduled a lesson on this day
-							if (lessonsInCurrentCycle > dayPositionInCycle) {
-								lessonsScheduledOnThisDay = 1
-							}
-						} else {
-							// We're in cycle 1 or higher
-							// We've already scheduled at least 1 lesson on this day (from cycle 0)
-							lessonsScheduledOnThisDay = 1
-							
-							// Check if this day needs extra lessons (is in the first extraLessons days)
-							if (dayPositionInCycle < extraLessons) {
-								// This day should have 2 lessons total
-								// We've scheduled 1 in cycle 0, check if we need to schedule 1 more
-								// In cycle 1, we schedule the second lesson on days 0 to extraLessons-1
-								if (cycleNumber === 1) {
-									// We're in cycle 1, check if we should schedule the second lesson
-									// We schedule it when lessonsInCurrentCycle matches the day position
-									if (lessonsInCurrentCycle > dayPositionInCycle) {
-										lessonsScheduledOnThisDay = 2 // Already scheduled both
-									} else {
-										lessonsScheduledOnThisDay = 1 // Still need to schedule the second
-									}
-								} else {
-									// Cycle 2+, we've already scheduled all needed lessons
-									lessonsScheduledOnThisDay = totalLessonsForThisDay
-								}
-							}
-						}
+						// Get how many lessons have actually been scheduled on this day
+						const lessonsScheduledOnThisDay = studentLessonsPerDay[s.name][dayIndex] || 0
 						
 						// Calculate how many more lessons we need on this day
 						const lessonsNeededOnThisDay = Math.max(0, totalLessonsForThisDay - lessonsScheduledOnThisDay)
@@ -1931,6 +1896,11 @@ const studentState: Record<string, {
 		dayResult.lessons.forEach(lesson => {
 			if (lesson.student && lesson.type === "lesson") {
 				studentProgress[lesson.student].scheduled++
+				// Track lessons per day for distribution logic
+				if (!studentLessonsPerDay[lesson.student][dayIndex]) {
+					studentLessonsPerDay[lesson.student][dayIndex] = 0
+				}
+				studentLessonsPerDay[lesson.student][dayIndex]++
 				if (lesson.teacher) {
 					studentTeacherProgress[lesson.student][lesson.teacher] = (studentTeacherProgress[lesson.student][lesson.teacher] || 0) + 1
 				}
