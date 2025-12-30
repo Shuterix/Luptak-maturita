@@ -9,7 +9,7 @@ import {
 	Shield,
 	MoreHorizontal,
 } from 'lucide-react'
-import { useAuth } from '@/app/contexts/AuthContext'
+import { useAuth } from '@/context/AuthContext'
 
 interface UserData {
 	_id: string
