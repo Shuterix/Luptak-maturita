@@ -1825,33 +1825,29 @@ const studentState: Record<string, {
 					const scheduledDaysPassedInCycle = scheduledDays.filter(d => d <= dayIndex).length
 					
 					// Calculate lessons for today
+					// When distribution is enabled, we want to spread lessons evenly across days
+					// If desiredLessons > number of days, we schedule multiple cycles
 					if (isScheduledDay) {
-						// This is a scheduled day
-						if (lessonsInCurrentCycle < scheduledDaysPassedInCycle) {
-							// We're behind in the current cycle, schedule a lesson
-							lessonsForToday = Math.min(remainingTotalLessons, 1)
-						} else if (cycleNumber >= 1 && remainingTotalLessons > 0) {
-							// We've completed at least one full cycle and still need more lessons
-							// In additional cycles, we schedule lessons on scheduled days following the same pattern
-							// Calculate how many lessons we still need from additional cycles
-							const lessonsNeededFromAdditionalCycles = s.desiredLessons - (cycleNumber * scheduledDays.length)
-							
-							// Calculate which position this day is in the cycle (0-based)
-							const dayPositionInCycle = scheduledDays.indexOf(dayIndex)
-							
-							// Check if we should schedule a lesson on this day in the current cycle
-							// We schedule lessons on scheduled days in order until we meet the total
-							// For example, if we need 2 more lessons and this is day 0 (position 0), schedule it
-							// If we need 2 more lessons and this is day 1 (position 1), schedule it
-							// If we need 2 more lessons and this is day 2 (position 2), don't schedule (we only need 2)
-							if (dayPositionInCycle < lessonsNeededFromAdditionalCycles) {
-								lessonsForToday = Math.min(remainingTotalLessons, 1)
-							} else {
-								lessonsForToday = 0
-							}
-						} else {
-							lessonsForToday = 0
-						}
+						// Calculate how many lessons should be scheduled on this day across all cycles
+						// For example, if we need 10 lessons over 8 days:
+						// - lessonsPerDayBase = 10 / 8 = 1 (floor)
+						// - extraLessons = 10 % 8 = 2
+						// - Days 0 and 1 get 2 lessons each, days 2-7 get 1 lesson each
+						const lessonsPerDayBase = Math.floor(s.desiredLessons / scheduledDays.length)
+						const extraLessons = s.desiredLessons % scheduledDays.length
+						const dayPositionInCycle = scheduledDays.indexOf(dayIndex)
+						const totalLessonsForThisDay = lessonsPerDayBase + (dayPositionInCycle < extraLessons ? 1 : 0)
+						
+						// Calculate how many lessons we've already scheduled on this day
+						// We need to count lessons scheduled on this specific day across all cycles
+						// Since we're processing days sequentially, we can use the cycle number and day position
+						const lessonsScheduledOnThisDay = cycleNumber + (lessonsInCurrentCycle > dayPositionInCycle ? 1 : 0)
+						
+						// Calculate how many more lessons we need on this day
+						const lessonsNeededOnThisDay = Math.max(0, totalLessonsForThisDay - lessonsScheduledOnThisDay)
+						
+						// Set lessonsForToday to the number of lessons needed on this day
+						lessonsForToday = Math.min(remainingTotalLessons, lessonsNeededOnThisDay)
 					} else {
 						// Not a scheduled day - only schedule if we're behind in the current cycle
 						const behindBy = scheduledDaysPassedInCycle - lessonsInCurrentCycle
