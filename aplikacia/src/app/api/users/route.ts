@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 		}
 
 		const users = await User.find(query)
-			.select('firstName lastName email role')
+			.select('firstName lastName email role profile')
 			.sort({ lastName: 1, firstName: 1 })
 			.lean()
 

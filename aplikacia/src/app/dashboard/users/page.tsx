@@ -142,80 +142,80 @@ export default function UsersPage() {
 								) : (
 									users.map((dbUser) => (
 										<tr key={dbUser._id}>
-											<td>
-												<label>
-													<input
-														type="checkbox"
-														className="checkbox"
-													/>
-												</label>
-											</td>
-											<td>
-												<div className="flex items-center gap-3">
-													<div className="avatar placeholder">
-														<div className="bg-neutral text-neutral-content rounded-full w-10">
-															<span className="text-xs">
+										<td>
+											<label>
+												<input
+													type="checkbox"
+													className="checkbox"
+												/>
+											</label>
+										</td>
+										<td>
+											<div className="flex items-center gap-3">
+												<div className="avatar placeholder">
+													<div className="bg-neutral text-neutral-content rounded-full w-10">
+														<span className="text-xs">
 																{`${dbUser.firstName?.[0] || ''}${dbUser.lastName?.[0] || ''}`}
-															</span>
-														</div>
+														</span>
 													</div>
-													<div>
-														<div className="font-bold">
+												</div>
+												<div>
+													<div className="font-bold">
 															{`${dbUser.firstName} ${dbUser.lastName}`}
-														</div>
-														<div className="text-sm text-gray-500">
+													</div>
+													<div className="text-sm text-gray-500">
 															ID: {dbUser._id.slice(-8)}
-														</div>
 													</div>
 												</div>
-											</td>
-											<td>
-												<div className="flex flex-col gap-1">
-													<div className="flex items-center gap-2">
-														<Mail className="h-4 w-4" />
+											</div>
+										</td>
+										<td>
+											<div className="flex flex-col gap-1">
+												<div className="flex items-center gap-2">
+													<Mail className="h-4 w-4" />
 														<span>{dbUser.email}</span>
-													</div>
 												</div>
-											</td>
-											<td>
-												<span className="badge badge-ghost">
+											</div>
+										</td>
+										<td>
+											<span className="badge badge-ghost">
 													{dbUser.role}
-												</span>
-											</td>
-											<td>
+											</span>
+										</td>
+										<td>
 												<span className="badge badge-success">
 													active
-												</span>
-											</td>
-											<td>
-												<div className="flex items-center gap-2">
-													<Calendar className="h-4 w-4" />
+											</span>
+										</td>
+										<td>
+											<div className="flex items-center gap-2">
+												<Calendar className="h-4 w-4" />
 													{dbUser.createdAt ? new Date(dbUser.createdAt).toLocaleDateString() : 'N/A'}
+											</div>
+										</td>
+										<td>
+											<div className="dropdown dropdown-end">
+												<div
+													tabIndex={0}
+													role="button"
+													className="btn btn-ghost btn-xs"
+												>
+													<MoreHorizontal className="h-4 w-4" />
 												</div>
-											</td>
-											<td>
-												<div className="dropdown dropdown-end">
-													<div
-														tabIndex={0}
-														role="button"
-														className="btn btn-ghost btn-xs"
-													>
-														<MoreHorizontal className="h-4 w-4" />
-													</div>
-													<ul
-														tabIndex={0}
-														className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
-													>
-														<li>
-															<a>Edit</a>
-														</li>
-														<li>
-															<a>View Profile</a>
-														</li>
-													</ul>
-												</div>
-											</td>
-										</tr>
+												<ul
+													tabIndex={0}
+													className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
+												>
+													<li>
+														<a>Edit</a>
+													</li>
+													<li>
+														<a>View Profile</a>
+													</li>
+												</ul>
+											</div>
+										</td>
+									</tr>
 									))
 								)}
 							</tbody>

@@ -825,16 +825,16 @@ export function TimetableEditorModal({
 
 				{/* Scrollable content */}
 				<div className="flex-1 overflow-y-auto p-4 sm:p-6 pt-2 sm:pt-0">
-					{/* Progress indicator */}
-					<div className="mb-6 space-y-4">
-						<div className="flex flex-wrap items-center justify-between gap-2 text-sm text-base-content/70">
-							<span>
-								Step {getStepProgress()} of {stepsConfig.length}
-							</span>
-							<span>
-								{groupLessons.length} group{groupLessons.length === 1 ? '' : 's'} configured
-							</span>
-						</div>
+				{/* Progress indicator */}
+				<div className="mb-6 space-y-4">
+					<div className="flex flex-wrap items-center justify-between gap-2 text-sm text-base-content/70">
+						<span>
+							Step {getStepProgress()} of {stepsConfig.length}
+						</span>
+						<span>
+							{groupLessons.length} group{groupLessons.length === 1 ? '' : 's'} configured
+						</span>
+					</div>
 						{/* Simplified progress on mobile */}
 						<div className="sm:hidden">
 							<div className="flex items-center gap-2">
@@ -849,90 +849,90 @@ export function TimetableEditorModal({
 						</div>
 						{/* Full steps indicator on desktop */}
 						<ul className="steps steps-horizontal w-full overflow-x-auto hidden sm:flex">
-							{stepsConfig.map((step, index) => {
-								const isDone = index < currentStepIndex
-								const isCurrent = index === currentStepIndex
-								return (
-									<li
-										key={step.id}
-										className={`step ${isDone || isCurrent ? 'step-primary' : ''}`}
-										data-content={isDone ? '✓' : index + 1}
-									>
-										<div className="mt-2 flex flex-col items-center gap-1 text-center">
-											<span className="text-xs font-semibold uppercase tracking-wide text-base-content/70">
-												{step.title}
-											</span>
-											<span className="text-[11px] text-base-content/40">{step.description}</span>
-										</div>
-									</li>
-								)
-							})}
-						</ul>
-					</div>
+						{stepsConfig.map((step, index) => {
+							const isDone = index < currentStepIndex
+							const isCurrent = index === currentStepIndex
+							return (
+								<li
+									key={step.id}
+									className={`step ${isDone || isCurrent ? 'step-primary' : ''}`}
+									data-content={isDone ? '✓' : index + 1}
+								>
+									<div className="mt-2 flex flex-col items-center gap-1 text-center">
+										<span className="text-xs font-semibold uppercase tracking-wide text-base-content/70">
+											{step.title}
+										</span>
+										<span className="text-[11px] text-base-content/40">{step.description}</span>
+									</div>
+								</li>
+							)
+						})}
+					</ul>
+				</div>
 
-					{/* Step content */}
-					<div className="mb-6">
-						{renderStepContent()}
-					</div>
+				{/* Step content */}
+				<div className="mb-6">
+					{renderStepContent()}
+				</div>
 
-					{/* Group lessons summary */}
-					{groupLessons.length > 0 && (
-						<div className="mt-6 pt-6 border-t border-base-300">
+				{/* Group lessons summary */}
+				{groupLessons.length > 0 && (
+					<div className="mt-6 pt-6 border-t border-base-300">
 							<div className="flex items-center justify-between mb-3">
 								<h4 className="font-medium text-base-content">Configured Groups:</h4>
 								<Button onClick={handleSave} size="sm" variant="primary" className="hidden sm:flex">
 									Save & Close
 								</Button>
 							</div>
-							<div className="space-y-2">
-								{groupLessons.map((group, index) => (
+						<div className="space-y-2">
+							{groupLessons.map((group, index) => (
 									<div key={index} className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 p-3 rounded-xl border border-base-300 bg-accent/20 hover:bg-accent/30 transition-colors">
-										<div className="flex flex-col gap-1">
-											<span className="font-medium text-base-content">{group.groupName}</span>
-											<span className="text-xs text-base-content/70">
-												{group.lessonsTarget?.count ?? 0}× per {group.lessonsTarget?.timeScope ?? 'week'}
+									<div className="flex flex-col gap-1">
+										<span className="font-medium text-base-content">{group.groupName}</span>
+										<span className="text-xs text-base-content/70">
+											{group.lessonsTarget?.count ?? 0}× per {group.lessonsTarget?.timeScope ?? 'week'}
 												{' · '}{group.duration ?? 45} min
-												{group.staticTimeSlot && (
-													<> · {group.staticTimeSlot.dayOfWeek.charAt(0).toUpperCase() + group.staticTimeSlot.dayOfWeek.slice(1)} {group.staticTimeSlot.startTime}</>
-												)}
+											{group.staticTimeSlot && (
+												<> · {group.staticTimeSlot.dayOfWeek.charAt(0).toUpperCase() + group.staticTimeSlot.dayOfWeek.slice(1)} {group.staticTimeSlot.startTime}</>
+											)}
 												{!group.staticTimeSlot && group.distributeAcrossDays && (
 													<> · <span className="text-success">distributed</span></>
 												)}
-											</span>
-										</div>
+										</span>
+									</div>
 										<div className="flex gap-2">
-											<Button
-												onClick={() => {
-													setCurrentGroupIndex(index)
-													setFormData({
-														groupName: group.groupName,
-														lessonsTarget: group.lessonsTarget || {
-															count: 1,
-															timeScope: 'week' as 'weekend' | 'week' | 'month' | 'timetable',
-														},
-														selectedTeachers: group.teachers,
-														staticTimeSlot: group.staticTimeSlot ? {
+									<Button
+										onClick={() => {
+											setCurrentGroupIndex(index)
+											setFormData({
+												groupName: group.groupName,
+												lessonsTarget: group.lessonsTarget || {
+													count: 1,
+													timeScope: 'week' as 'weekend' | 'week' | 'month' | 'timetable',
+												},
+												selectedTeachers: group.teachers,
+												staticTimeSlot: group.staticTimeSlot ? {
 															dayOfWeek: group.staticTimeSlot.dayOfWeek,
 															startTime: group.staticTimeSlot.startTime,
-															enabled: true,
-														} : {
-															dayOfWeek: 'monday',
-															startTime: '17:00',
-															enabled: false,
-														},
+													enabled: true,
+												} : {
+													dayOfWeek: 'monday',
+													startTime: '17:00',
+													enabled: false,
+												},
 														duration: group.duration ?? group.staticTimeSlot?.duration ?? 45,
 														distributeAcrossDays: group.distributeAcrossDays ?? true,
-														selectedParticipants: group.participants,
-														preferredRoom: group.preferredRoom || '',
-														notes: group.notes || '',
-													})
-													setCurrentStep('group-selection')
-												}}
-												variant="secondary"
-												size="sm"
-											>
-												Edit
-											</Button>
+												selectedParticipants: group.participants,
+												preferredRoom: group.preferredRoom || '',
+												notes: group.notes || '',
+											})
+											setCurrentStep('group-selection')
+										}}
+										variant="secondary"
+										size="sm"
+									>
+										Edit
+									</Button>
 											<Button
 												onClick={() => {
 													const updatedGroups = groupLessons.filter((_, i) => i !== index)
@@ -963,11 +963,11 @@ export function TimetableEditorModal({
 												Remove
 											</Button>
 										</div>
-									</div>
-								))}
-							</div>
+								</div>
+							))}
 						</div>
-					)}
+					</div>
+				)}
 				</div>
 
 				{/* Sticky Navigation Footer */}

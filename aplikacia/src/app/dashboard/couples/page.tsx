@@ -510,98 +510,98 @@ export default function CouplesPage() {
 
 							{/* Desktop Table View */}
 							<div className="overflow-x-auto hidden sm:block">
-								<table className="table table-zebra">
-									<thead>
-										<tr>
-											<th>
-												<button
-													className="flex items-center gap-1 hover:text-primary"
-													onClick={() => handleSort('partnerA')}
-												>
-													Partner A
-													{sortConfig.key === 'partnerA' && (
-														<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-													)}
-												</button>
-											</th>
-											<th>
-												<button
-													className="flex items-center gap-1 hover:text-primary"
-													onClick={() => handleSort('partnerB')}
-												>
-													Partner B
-													{sortConfig.key === 'partnerB' && (
-														<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-													)}
-												</button>
-											</th>
-											<th>
-												<button
-													className="flex items-center gap-1 hover:text-primary"
-													onClick={() => handleSort('baseGroup')}
-												>
-													Base Group
-													{sortConfig.key === 'baseGroup' && (
-														<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-													)}
-												</button>
-											</th>
-											<th>
-												<button
-													className="flex items-center gap-1 hover:text-primary"
-													onClick={() => handleSort('teacher')}
-												>
-													Preferred Teacher
-													{sortConfig.key === 'teacher' && (
-														<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-													)}
-												</button>
-											</th>
-											<th>Actions</th>
+							<table className="table table-zebra">
+								<thead>
+									<tr>
+										<th>
+											<button
+												className="flex items-center gap-1 hover:text-primary"
+												onClick={() => handleSort('partnerA')}
+											>
+												Partner A
+												{sortConfig.key === 'partnerA' && (
+													<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+												)}
+											</button>
+										</th>
+										<th>
+											<button
+												className="flex items-center gap-1 hover:text-primary"
+												onClick={() => handleSort('partnerB')}
+											>
+												Partner B
+												{sortConfig.key === 'partnerB' && (
+													<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+												)}
+											</button>
+										</th>
+										<th>
+											<button
+												className="flex items-center gap-1 hover:text-primary"
+												onClick={() => handleSort('baseGroup')}
+											>
+												Base Group
+												{sortConfig.key === 'baseGroup' && (
+													<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+												)}
+											</button>
+										</th>
+										<th>
+											<button
+												className="flex items-center gap-1 hover:text-primary"
+												onClick={() => handleSort('teacher')}
+											>
+												Preferred Teacher
+												{sortConfig.key === 'teacher' && (
+													<span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+												)}
+											</button>
+										</th>
+										<th>Actions</th>
+									</tr>
+								</thead>
+								<tbody>
+									{filteredAndSortedPairs.map((pair) => (
+										<tr key={pair._id}>
+											<td>{getStudentName(pair.studentAId)}</td>
+											<td>{getStudentName(pair.studentBId)}</td>
+											<td>
+												{pair.baseGroup ? (
+													<span className="badge badge-outline">{pair.baseGroup}</span>
+												) : (
+													<span className="text-base-content/40">—</span>
+												)}
+											</td>
+											<td>
+												{pair.preferredTeacherId ? (
+													`${pair.preferredTeacherId.firstName} ${pair.preferredTeacherId.lastName}`
+												) : (
+													<span className="text-base-content/40">—</span>
+												)}
+											</td>
+											<td>
+												<div className="flex gap-2">
+													<Button className="btn-ghost btn-sm" onClick={() => handleOpenModal(pair)}>
+														Edit
+													</Button>
+													<Button
+														className="btn-ghost btn-sm text-error"
+														onClick={() => handleDeleteClick(pair)}
+														disabled={deletingId === pair._id}
+													>
+														{deletingId === pair._id ? (
+															<span className="loading loading-spinner loading-xs"></span>
+														) : (
+															'Delete'
+														)}
+													</Button>
+												</div>
+											</td>
 										</tr>
-									</thead>
-									<tbody>
-										{filteredAndSortedPairs.map((pair) => (
-											<tr key={pair._id}>
-												<td>{getStudentName(pair.studentAId)}</td>
-												<td>{getStudentName(pair.studentBId)}</td>
-												<td>
-													{pair.baseGroup ? (
-														<span className="badge badge-outline">{pair.baseGroup}</span>
-													) : (
-														<span className="text-base-content/40">—</span>
-													)}
-												</td>
-												<td>
-													{pair.preferredTeacherId ? (
-														`${pair.preferredTeacherId.firstName} ${pair.preferredTeacherId.lastName}`
-													) : (
-														<span className="text-base-content/40">—</span>
-													)}
-												</td>
-												<td>
-													<div className="flex gap-2">
-														<Button className="btn-ghost btn-sm" onClick={() => handleOpenModal(pair)}>
-															Edit
-														</Button>
-														<Button
-															className="btn-ghost btn-sm text-error"
-															onClick={() => handleDeleteClick(pair)}
-															disabled={deletingId === pair._id}
-														>
-															{deletingId === pair._id ? (
-																<span className="loading loading-spinner loading-xs"></span>
-															) : (
-																'Delete'
-															)}
-														</Button>
-													</div>
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
-							</div>
+									))}
+								</tbody>
+							</table>
+						</div>
 						</>
 					)}
 				</div>

@@ -10,6 +10,7 @@ import {
 	CircleUser,
 	Users,
 	Calendar,
+	Building2,
 } from 'lucide-react'
 import { ActionButton } from './ActionButton'
 import { LogoutButton } from './LogoutButton'
@@ -31,6 +32,12 @@ export default function Sidebar() {
 			name: 'Dashboard',
 			href: '/dashboard',
 			icon: <Home className="h-5 w-5" />,
+		},
+		{
+			name: 'Club Overview',
+			href: '/dashboard/club-overview',
+			icon: <Building2 className="h-5 w-5" />,
+			roles: ['student', 'trainer', 'admin'],
 		},
 		{
 			name: 'My Schedule',

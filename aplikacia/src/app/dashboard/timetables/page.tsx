@@ -739,23 +739,23 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 							end: Math.min(endMinutes, dayEndMinutes),
 						})
 					}
-				}
 			}
-			
+		}
+		
 			// Calculate available windows for this day (invert unavailability)
 			unavailRanges.sort((a, b) => a.start - b.start)
-			let currentStart = dayStartMinutes
-			
+		let currentStart = dayStartMinutes
+		
 			for (const unavail of unavailRanges) {
-				if (currentStart < unavail.start) {
+			if (currentStart < unavail.start) {
 					allAvailableWindows.push({ start: currentStart, end: unavail.start })
-				}
-				currentStart = Math.max(currentStart, unavail.end)
 			}
-			
-			if (currentStart < dayEndMinutes) {
+			currentStart = Math.max(currentStart, unavail.end)
+		}
+		
+		if (currentStart < dayEndMinutes) {
 				allAvailableWindows.push({ start: currentStart, end: dayEndMinutes })
-			}
+		}
 		}
 		
 		// If no available windows on any day, return empty (will cause validation error)
@@ -884,15 +884,15 @@ const handleGenerateAutomaticSchedule = () => {
 				autoDayStart,
 				autoDayEnd
 			)
-			
-			return {
+				
+				return {
 				name: teacherName,
-				availability,
+					availability,
 				maxLessonsPerDay: Math.max(1, config.maxLessonsPerDay || 4),
 				room: config.room || `Room ${index + 1}`,
 				unavailableDates: [], // TODO: Add support for teacher unavailable dates
-			}
-		})
+				}
+			})
 
 		// Use only database couples - no fallback to manual input
 		if (dbCouples.length === 0) {
@@ -2214,8 +2214,8 @@ return (
 				</div>
 				<div className="flex items-center gap-2">
 					<Button onClick={() => setIsCreateModalOpen(true)} className="btn-primary btn-sm sm:btn-md flex-1 sm:flex-none">
-						Create Timetable
-					</Button>
+							Create Timetable
+						</Button>
 					<Button onClick={() => user?.clubId && fetchTimetables(user.clubId)} className="btn-outline btn-sm sm:btn-md">
 						Refresh
 					</Button>
@@ -2471,22 +2471,22 @@ return (
 
 		<section className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
 			<div className="card-body space-y-4">
-				<div>
-					<h2 className="card-title">Automatic Scheduler</h2>
-					<p className="text-sm text-base-content/60">
-						Configure teachers, couples, and breaks, then generate a timetable instantly. Make sure the timetable date range is set first.
-					</p>
-				</div>
+					<div>
+						<h2 className="card-title">Automatic Scheduler</h2>
+						<p className="text-sm text-base-content/60">
+							Configure teachers, couples, and breaks, then generate a timetable instantly. Make sure the timetable date range is set first.
+						</p>
+					</div>
 				<div className="flex flex-col sm:flex-row gap-2">
 					<Button className="btn-outline btn-sm sm:btn-md" onClick={() => setIsEditorModalOpen(true)}>
-						Configure Group Lessons
-					</Button>
+							Configure Group Lessons
+						</Button>
 					<Button className="btn-primary btn-sm sm:btn-md" onClick={() => setIsSchedulerModalOpen(true)}>
-						Configure Scheduler
-					</Button>
+							Configure Scheduler
+						</Button>
 					<Button className="btn-secondary btn-sm sm:btn-md" onClick={handleGenerateAutomaticSchedule}>
-						Generate Timetable
-					</Button>
+							Generate Timetable
+						</Button>
 				</div>
 
 				{autoError && (
@@ -2499,15 +2499,15 @@ return (
 
 		<section className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
 			<div className="card-body space-y-4">
-				<div>
-					<h2 className="card-title">Timetable Configuration</h2>
-					<p className="text-sm text-base-content/60">
-						Configure timetable name, type, dates, and schedule settings.
-					</p>
-				</div>
+					<div>
+						<h2 className="card-title">Timetable Configuration</h2>
+						<p className="text-sm text-base-content/60">
+							Configure timetable name, type, dates, and schedule settings.
+						</p>
+						</div>
 				<Button className="btn-primary btn-sm sm:btn-md w-full sm:w-auto" onClick={() => setIsConfigModalOpen(true)}>
-					Configure Timetable
-				</Button>
+						Configure Timetable
+										</Button>
 				{form.name && (
 					<div className="p-3 sm:p-4 bg-base-200 rounded-xl">
 						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
@@ -2535,18 +2535,18 @@ return (
 								className="btn-primary btn-sm sm:btn-md w-full sm:w-auto"
 							>
 								{saving ? 'Saving…' : 'Save timetable'}
-							</Button>
-						</div>
-					</div>
+										</Button>
+								</div>
+								</div>
 				)}
-			</div>
+							</div>
 		</section>
 
 		<section className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
 			<div className="card-body space-y-4">
 				<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
 					<div className="flex items-center gap-2">
-						<h2 className="card-title">Timetable</h2>
+					<h2 className="card-title">Timetable</h2>
 						<span className="badge badge-outline">{lessons.length} lessons</span>
 					</div>
 					<div className="flex gap-2">
@@ -2690,7 +2690,7 @@ return (
 																				<span>{badgeLabel}</span>
 																				<div className="flex items-center gap-1">
 																					{isCancelled && <span className="badge badge-error badge-xs">Cancelled</span>}
-																					{lesson.locked && <span className="badge badge-ghost badge-xs">Locked</span>}
+																				{lesson.locked && <span className="badge badge-ghost badge-xs">Locked</span>}
 																				</div>
 																			</div>
 																			<div className={timeTextClass}>
@@ -2856,7 +2856,7 @@ return (
 																					<span>{badgeLabel}</span>
 																					<div className="flex items-center gap-1">
 																						{isCancelled && <span className="badge badge-error badge-xs">Cancelled</span>}
-																						{lesson.locked && <span className="badge badge-ghost badge-xs">Locked</span>}
+																					{lesson.locked && <span className="badge badge-ghost badge-xs">Locked</span>}
 																					</div>
 																				</div>
 																				<div className={timeTextClass}>
