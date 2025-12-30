@@ -61,8 +61,8 @@ export default function StudentSettingsPage() {
 	const [error, setError] = useState<string | null>(null)
 	const [success, setSuccess] = useState<string | null>(null)
 
-	// Availability state
-	const [availability, setAvailability] = useState<WeeklyAvailability>({})
+	// Unavailability state (times when student CANNOT train)
+	const [unavailability, setUnavailability] = useState<WeeklyAvailability>({})
 	const [pairs, setPairs] = useState<StudentPair[]>([])
 	const [currentPairId, setCurrentPairId] = useState<string | null>(null)
 
@@ -85,9 +85,7 @@ export default function StudentSettingsPage() {
 			if (userRes.ok) {
 				const userData = await userRes.json()
 				if (userData.user?.unavailability) {
-					// Convert unavailability to availability (inverse logic if needed)
-					// For now, we'll work with availability directly
-					setAvailability(userData.user.unavailability || {})
+					setUnavailability(userData.user.unavailability || {})
 				}
 				setCurrentPairId(userData.user?.partnerId || null)
 			}
@@ -117,21 +115,21 @@ export default function StudentSettingsPage() {
 	}
 
 	const addTimeWindow = (day: DayOfWeek) => {
-		setAvailability((prev) => ({
+		setUnavailability((prev) => ({
 			...prev,
-			[day]: [...(prev[day] || []), { start: '09:00', end: '17:00' }],
+			[day]: [...(prev[day] || []), { start: '08:00', end: '15:00' }],
 		}))
 	}
 
 	const removeTimeWindow = (day: DayOfWeek, index: number) => {
-		setAvailability((prev) => ({
+		setUnavailability((prev) => ({
 			...prev,
 			[day]: (prev[day] || []).filter((_, i) => i !== index),
 		}))
 	}
 
 	const updateTimeWindow = (day: DayOfWeek, index: number, field: 'start' | 'end', value: string) => {
-		setAvailability((prev) => ({
+		setUnavailability((prev) => ({
 			...prev,
 			[day]: (prev[day] || []).map((window, i) =>
 				i === index ? { ...window, [field]: value } : window
@@ -139,7 +137,7 @@ export default function StudentSettingsPage() {
 		}))
 	}
 
-	const handleSaveAvailability = async () => {
+	const handleSaveUnavailability = async () => {
 		if (!user?._id) {
 			setError('User not found')
 			return
@@ -150,32 +148,31 @@ export default function StudentSettingsPage() {
 		setSuccess(null)
 
 		try {
-			// Save availability as unavailability (inverse) or directly
-			// For now, we'll save it directly - the API should handle the conversion if needed
+			// Save unavailability (times when student CANNOT train)
 			const res = await fetch(`/api/users/${user._id}/availability`, {
 				method: 'PATCH',
 				headers: {
 					'Content-Type': 'application/json',
 				},
 				body: JSON.stringify({
-					availability: availability,
+					availability: unavailability, // The API stores this in the unavailability field
 				}),
 			})
 
 			if (!res.ok) {
 				const data = await res.json()
-				throw new Error(data.message || 'Failed to save availability')
+				throw new Error(data.message || 'Failed to save unavailability')
 			}
 
-			setSuccess('Availability saved successfully!')
-			showAlertToast('Availability saved successfully!', {
+			setSuccess('Unavailability saved successfully!')
+			showAlertToast('Unavailability saved successfully!', {
 				variant: 'success',
 				duration: 3000,
 			})
 			await refreshUser()
 		} catch (err: any) {
-			console.error('Error saving availability:', err)
-			setError(err.message || 'Failed to save availability')
+			console.error('Error saving unavailability:', err)
+			setError(err.message || 'Failed to save unavailability')
 		} finally {
 			setSaving(false)
 		}
@@ -220,15 +217,16 @@ export default function StudentSettingsPage() {
 				</Alert>
 			)}
 
-			{/* Weekly Availability Section */}
+			{/* Weekly Unavailability Section */}
 			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
 				<div className="card-body">
 					<h2 className="card-title flex items-center gap-2 mb-4">
 						<Clock className="h-5 w-5" />
-						Weekly Availability
+						Weekly Unavailability
 					</h2>
 					<p className="text-sm text-base-content/70 mb-6">
-						Set your available time windows for each day of the week. Teachers will use this information when scheduling your lessons.
+						Set the times when you <strong>CANNOT</strong> train (e.g., school hours, work). 
+						Leave empty if you're available anytime. Teachers will schedule your lessons outside these times.
 					</p>
 
 					<div className="space-y-6">
@@ -241,22 +239,23 @@ export default function StudentSettingsPage() {
 										className="btn-sm btn-outline"
 										onClick={() => addTimeWindow(day)}
 									>
-										+ Add Time Window
+										+ Add Unavailable Time
 									</Button>
 								</div>
 
-								{(!availability[day] || availability[day]!.length === 0) && (
-									<p className="text-sm text-base-content/50 italic">
-										No availability set for this day
+								{(!unavailability[day] || unavailability[day]!.length === 0) && (
+									<p className="text-sm text-success/70 italic">
+										✓ Available all day
 									</p>
 								)}
 
 								<div className="space-y-3">
-									{availability[day]?.map((window, index) => (
-										<div key={index} className="flex items-center gap-3 flex-wrap">
+									{unavailability[day]?.map((window, index) => (
+										<div key={index} className="flex items-center gap-3 flex-wrap bg-error/5 p-2 rounded-lg border border-error/20">
+											<span className="text-error/70 text-sm">Cannot train:</span>
 											<Input
 												type="time"
-												label="Start"
+												label="From"
 												value={window.start}
 												onChange={(e) => updateTimeWindow(day, index, 'start', e.target.value)}
 												className="flex-1 min-w-[120px]"
@@ -264,7 +263,7 @@ export default function StudentSettingsPage() {
 											<span className="text-base-content/60">to</span>
 											<Input
 												type="time"
-												label="End"
+												label="Until"
 												value={window.end}
 												onChange={(e) => updateTimeWindow(day, index, 'end', e.target.value)}
 												className="flex-1 min-w-[120px]"
@@ -287,7 +286,7 @@ export default function StudentSettingsPage() {
 						<Button
 							type="button"
 							className="btn-primary"
-							onClick={handleSaveAvailability}
+							onClick={handleSaveUnavailability}
 							disabled={saving}
 						>
 							{saving ? (
@@ -298,7 +297,7 @@ export default function StudentSettingsPage() {
 							) : (
 								<>
 									<Save className="h-4 w-4" />
-									Save Availability
+									Save Unavailability
 								</>
 							)}
 						</Button>

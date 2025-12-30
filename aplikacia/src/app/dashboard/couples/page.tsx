@@ -27,20 +27,18 @@ interface Pair {
 	createdAt?: string
 }
 
-const BASE_GROUPS = ['juniors1', 'juniors2', 'intermediates', 'advanced']
-
 export default function CouplesPage() {
 	const { user, isLoading: authLoading, refreshUser } = useAuth()
 	const [pairs, setPairs] = useState<Pair[]>([])
 	const [students, setStudents] = useState<Student[]>([])
 	const [teachers, setTeachers] = useState<Teacher[]>([])
+	const [availableGroups, setAvailableGroups] = useState<string[]>([])
 	const [loading, setLoading] = useState(true)
 	const [submitting, setSubmitting] = useState(false)
 	const [deletingId, setDeletingId] = useState<string | null>(null)
 	const [error, setError] = useState<string | null>(null)
 	const [isModalOpen, setIsModalOpen] = useState(false)
 	const [editingPair, setEditingPair] = useState<Pair | null>(null)
-	const [seeding, setSeeding] = useState(false)
 	const [deleteConfirmPair, setDeleteConfirmPair] = useState<Pair | null>(null)
 	const [filters, setFilters] = useState({
 		baseGroup: '',
@@ -80,7 +78,7 @@ export default function CouplesPage() {
 
 		if (user?.clubId) {
 			// Fetch all data in parallel
-			Promise.all([fetchPairs(), fetchStudents(), fetchTeachers()])
+			Promise.all([fetchPairs(), fetchStudents(), fetchTeachers(), fetchGroups()])
 		} else {
 			// User is loaded but doesn't have a clubId
 			setLoading(false)
@@ -91,7 +89,7 @@ export default function CouplesPage() {
 	// Handle the case where user gets refreshed and now has clubId
 	useEffect(() => {
 		if (!authLoading && user?.clubId && loading && pairs.length === 0 && students.length === 0 && !error) {
-			Promise.all([fetchPairs(), fetchStudents(), fetchTeachers()])
+			Promise.all([fetchPairs(), fetchStudents(), fetchTeachers(), fetchGroups()])
 		}
 	}, [user?.clubId, authLoading, loading, pairs.length, students.length, error])
 
@@ -139,6 +137,18 @@ export default function CouplesPage() {
 			}
 		} catch (err) {
 			console.error('Error fetching teachers:', err)
+		}
+	}
+
+	const fetchGroups = async () => {
+		try {
+			const res = await fetch('/api/groups', { cache: 'no-store' })
+			if (res.ok) {
+				const data = await res.json()
+				setAvailableGroups(data.groups || [])
+			}
+		} catch (err) {
+			console.error('Error fetching groups:', err)
 		}
 	}
 
@@ -344,30 +354,6 @@ export default function CouplesPage() {
 		}))
 	}
 
-	const handleSeedStudents = async () => {
-		setSeeding(true)
-		setError(null)
-		try {
-			const res = await fetch('/api/mock/seed-students', { method: 'POST' })
-			if (!res.ok) {
-				const data = await res.json()
-				throw new Error(data.error || 'Failed to seed students')
-			}
-			const data = await res.json()
-			showAlertToast(data.message || 'Students seeded successfully', {
-				variant: 'success',
-				title: 'Success',
-			})
-			// Refresh students list
-			fetchStudents()
-		} catch (err: any) {
-			setError(err.message)
-			showAlertToast(err.message, { variant: 'error', title: 'Error' })
-		} finally {
-			setSeeding(false)
-		}
-	}
-
 	if (loading) {
 		return (
 			<div className="flex items-center justify-center min-h-screen">
@@ -384,20 +370,6 @@ export default function CouplesPage() {
 					<p className="text-base-content/60">Create and manage dance couples, assign them to groups</p>
 				</div>
 				<div className="flex gap-2">
-					<Button
-						className="btn-secondary"
-						onClick={handleSeedStudents}
-						disabled={seeding}
-					>
-						{seeding ? (
-							<>
-								<span className="loading loading-spinner loading-sm"></span>
-								Seeding...
-							</>
-						) : (
-							'Seed Test Students'
-						)}
-					</Button>
 					<Button className="btn-primary" onClick={() => handleOpenModal()}>
 						Create Couple
 					</Button>
@@ -432,7 +404,7 @@ export default function CouplesPage() {
 					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
 						<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
 					</svg>
-					<span>No students found. Click "Seed Test Students" to create test data, or add students through the Users page.</span>
+					<span>No students found. Please add students through the Users page.</span>
 				</div>
 			)}
 
@@ -456,7 +428,7 @@ export default function CouplesPage() {
 								onChange={(e) => setFilters({ ...filters, baseGroup: e.target.value })}
 							>
 								<option value="">All Groups</option>
-								{BASE_GROUPS.map((group) => (
+								{availableGroups.map((group) => (
 									<option key={group} value={group}>
 										{group}
 									</option>
@@ -656,7 +628,7 @@ export default function CouplesPage() {
 									onChange={(e) => setFormData({ ...formData, baseGroup: e.target.value })}
 								>
 									<option value="">No group assigned</option>
-									{BASE_GROUPS.map((group) => (
+									{availableGroups.map((group) => (
 										<option key={group} value={group}>
 											{group}
 										</option>

@@ -16,6 +16,8 @@ interface GroupLesson {
 		startTime: string
 		duration?: number
 	}
+	duration?: number // Custom duration in minutes (defaults to timetable's lessonDuration if not set)
+	distributeAcrossDays?: boolean // When true, spread lessons evenly across timetable days
 	preferredRoom?: string
 	notes?: string
 }
@@ -59,6 +61,26 @@ export function TimetableEditorModal({
 	const [currentStep, setCurrentStep] = useState<Step>('group-selection')
 	const [groupLessons, setGroupLessons] = useState<GroupLesson[]>(initialGroupLessons)
 	const [currentGroupIndex, setCurrentGroupIndex] = useState(0)
+	const [availableGroups, setAvailableGroups] = useState<string[]>([])
+
+	// Fetch groups from database when modal opens
+	useEffect(() => {
+		if (isOpen) {
+			fetchGroups()
+		}
+	}, [isOpen])
+
+	const fetchGroups = async () => {
+		try {
+			const res = await fetch('/api/groups', { cache: 'no-store' })
+			if (res.ok) {
+				const data = await res.json()
+				setAvailableGroups(data.groups || [])
+			}
+		} catch (err) {
+			console.error('Error fetching groups:', err)
+		}
+	}
 
 	// Sync modal's internal state with initialGroupLessons prop when modal opens
 	useEffect(() => {
@@ -78,9 +100,10 @@ export function TimetableEditorModal({
 		staticTimeSlot: {
 			dayOfWeek: 'monday',
 			startTime: '17:00',
-			duration: 45,
 			enabled: false,
 		},
+		duration: 45, // Default duration in minutes
+		distributeAcrossDays: true, // Default to true for even distribution
 		selectedParticipants: [] as Couple[],
 		preferredRoom: '',
 		notes: '',
@@ -97,7 +120,6 @@ export function TimetableEditorModal({
 
 	if (!isOpen) return null
 
-	const availableGroups = ['juniors1', 'juniors2', 'intermediates', 'advanced']
 	const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 	
 	// Get available days based on timetable date range
@@ -146,8 +168,10 @@ export function TimetableEditorModal({
 			staticTimeSlot: formData.staticTimeSlot?.enabled ? {
 				dayOfWeek: formData.staticTimeSlot.dayOfWeek,
 				startTime: formData.staticTimeSlot.startTime,
-				duration: formData.staticTimeSlot.duration || 45,
+				duration: formData.duration || 45, // Use main duration field
 			} : undefined,
+			duration: formData.duration || 45, // Always save the duration
+			distributeAcrossDays: formData.staticTimeSlot?.enabled ? false : formData.distributeAcrossDays, // Disable distribution for static slots
 			preferredRoom: formData.preferredRoom || undefined,
 			notes: formData.notes || undefined,
 		}
@@ -194,9 +218,10 @@ export function TimetableEditorModal({
 			staticTimeSlot: {
 				dayOfWeek: 'monday',
 				startTime: '17:00',
-				duration: 45,
 				enabled: false,
 			},
+			duration: 45,
+			distributeAcrossDays: true,
 			selectedParticipants: [],
 			preferredRoom: '',
 			notes: '',
@@ -431,7 +456,9 @@ export function TimetableEditorModal({
 											<div>
 												<p className="font-medium text-base-content">{teacher.name}</p>
 												<p className="text-xs text-base-content/60">
-													Room {teacher.room} · Availability {teacher.availability.join(', ')}
+													Room {teacher.room} · {teacher.availability.length > 0 
+														? `Unavailability ${teacher.availability.join(', ')}`
+														: 'Available anytime'}
 												</p>
 											</div>
 										</div>
@@ -466,6 +493,28 @@ export function TimetableEditorModal({
 										Disable this if the generator should find the best overlapping slot automatically.
 									</p>
 								</div>
+							</label>
+
+							{/* Duration field - always visible */}
+							<label className="form-control">
+								<span className="label-text">Duration (minutes)</span>
+								<Input
+									type="number"
+									min="15"
+									max="300"
+									step="15"
+									value={formData.duration}
+									onChange={(e) => {
+										const value = parseInt(e.target.value, 10)
+										setFormData((prev) => ({
+											...prev,
+											duration: value > 0 ? value : 45,
+										}))
+									}}
+								/>
+								<span className="label-text-alt text-base-content/50">
+									Default is 45 minutes. Group lessons can have longer durations.
+								</span>
 							</label>
 
 							{formData.staticTimeSlot.enabled ? (
@@ -508,32 +557,33 @@ export function TimetableEditorModal({
 											}
 										/>
 									</label>
-
-									<label className="form-control sm:col-span-2">
-										<span className="label-text">Duration (minutes)</span>
-										<Input
-											type="number"
-											min="15"
-											max="300"
-											step="15"
-											value={formData.staticTimeSlot.duration}
-											onChange={(e) => {
-												const value = parseInt(e.target.value, 10)
-												setFormData((prev) => ({
-													...prev,
-													staticTimeSlot: {
-														...prev.staticTimeSlot,
-														duration: value > 0 ? value : 45,
-													},
-												}))
-											}}
-										/>
-									</label>
 								</div>
 							) : (
-								<Alert>
-									We&apos;ll look for a shared slot across all selected teachers and couples within the timetable window.
-								</Alert>
+								<div className="space-y-4">
+									<Alert>
+										We&apos;ll look for a shared slot across all selected teachers and couples within the timetable window.
+									</Alert>
+									
+									<label className="flex items-center gap-3 rounded-xl border border-base-300 bg-base-200/40 p-3">
+										<input
+											type="checkbox"
+											className="toggle toggle-primary"
+											checked={formData.distributeAcrossDays}
+											onChange={(e) =>
+												setFormData((prev) => ({
+													...prev,
+													distributeAcrossDays: e.target.checked,
+												}))
+											}
+										/>
+										<div>
+											<p className="font-medium text-base-content">Distribute across days</p>
+											<p className="text-xs text-base-content/60">
+												Spread lessons evenly across all timetable days. E.g., 4 lessons over 2 days = 2 per day.
+											</p>
+										</div>
+									</label>
+								</div>
 							)}
 						</div>
 					</div>
@@ -723,10 +773,10 @@ export function TimetableEditorModal({
 									{formData.staticTimeSlot.enabled ? (
 										<p>
 											{formData.staticTimeSlot.dayOfWeek}, {formData.staticTimeSlot.startTime} ·{' '}
-											{formData.staticTimeSlot.duration} min
+											{formData.duration} min
 										</p>
 									) : (
-										<p>Flexible – generator will pick a slot</p>
+										<p>Flexible · {formData.duration} min{formData.distributeAcrossDays ? ' · Distributed' : ''}</p>
 									)}
 								</div>
 								<div className="space-y-1">
@@ -811,6 +861,12 @@ export function TimetableEditorModal({
 					</Button>
 
 					<div className="flex items-center gap-2">
+						{/* Show Save button on first step if there are configured groups */}
+						{currentStep === 'group-selection' && groupLessons.length > 0 && (
+							<Button onClick={handleSave} variant="primary">
+								Save & Close
+							</Button>
+						)}
 						{(currentStep === 'settings' || currentStep === 'review') && (
 							<Button onClick={handleSave} variant="primary">
 								Save all groups
@@ -837,7 +893,12 @@ export function TimetableEditorModal({
 				{/* Group lessons summary */}
 				{groupLessons.length > 0 && (
 					<div className="mt-6 pt-6 border-t border-base-300">
-						<h4 className="font-medium mb-3 text-base-content">Configured Groups:</h4>
+						<div className="flex items-center justify-between mb-3">
+							<h4 className="font-medium text-base-content">Configured Groups:</h4>
+							<Button onClick={handleSave} size="sm" variant="primary">
+								Save & Close
+							</Button>
+						</div>
 						<div className="space-y-2">
 							{groupLessons.map((group, index) => (
 								<div key={index} className="flex justify-between items-center p-3 rounded-xl border border-base-300 bg-accent/20 hover:bg-accent/30 transition-colors">
@@ -845,41 +906,78 @@ export function TimetableEditorModal({
 										<span className="font-medium text-base-content">{group.groupName}</span>
 										<span className="text-xs text-base-content/70">
 											{group.lessonsTarget?.count ?? 0}× per {group.lessonsTarget?.timeScope ?? 'week'}
+											{' · '}{group.duration ?? 45} min
 											{group.staticTimeSlot && (
 												<> · {group.staticTimeSlot.dayOfWeek.charAt(0).toUpperCase() + group.staticTimeSlot.dayOfWeek.slice(1)} {group.staticTimeSlot.startTime}</>
 											)}
+											{!group.staticTimeSlot && group.distributeAcrossDays && (
+												<> · <span className="text-success">distributed</span></>
+											)}
 										</span>
 									</div>
-									<Button
-										onClick={() => {
-											setCurrentGroupIndex(index)
-											setFormData({
-												groupName: group.groupName,
-												lessonsTarget: group.lessonsTarget || {
-													count: 1,
-													timeScope: 'week' as 'weekend' | 'week' | 'month' | 'timetable',
-												},
-												selectedTeachers: group.teachers,
-												staticTimeSlot: group.staticTimeSlot ? {
-													...group.staticTimeSlot,
-													enabled: true,
-												} : {
-													dayOfWeek: 'monday',
-													startTime: '17:00',
-													duration: 45,
-													enabled: false,
-												},
-												selectedParticipants: group.participants,
-												preferredRoom: group.preferredRoom || '',
-												notes: group.notes || '',
-											})
-											setCurrentStep('group-selection')
-										}}
-										variant="secondary"
-										size="sm"
-									>
-										Edit
-									</Button>
+									<div className="flex gap-2">
+										<Button
+											onClick={() => {
+												setCurrentGroupIndex(index)
+												setFormData({
+													groupName: group.groupName,
+													lessonsTarget: group.lessonsTarget || {
+														count: 1,
+														timeScope: 'week' as 'weekend' | 'week' | 'month' | 'timetable',
+													},
+													selectedTeachers: group.teachers,
+													staticTimeSlot: group.staticTimeSlot ? {
+														dayOfWeek: group.staticTimeSlot.dayOfWeek,
+														startTime: group.staticTimeSlot.startTime,
+														enabled: true,
+													} : {
+														dayOfWeek: 'monday',
+														startTime: '17:00',
+														enabled: false,
+													},
+													duration: group.duration ?? group.staticTimeSlot?.duration ?? 45,
+													distributeAcrossDays: group.distributeAcrossDays ?? true,
+													selectedParticipants: group.participants,
+													preferredRoom: group.preferredRoom || '',
+													notes: group.notes || '',
+												})
+												setCurrentStep('group-selection')
+											}}
+											variant="secondary"
+											size="sm"
+										>
+											Edit
+										</Button>
+										<Button
+											onClick={() => {
+												const updatedGroups = groupLessons.filter((_, i) => i !== index)
+												setGroupLessons(updatedGroups)
+												// If we were editing this group, reset form
+												if (currentGroupIndex === index) {
+													setCurrentGroupIndex(updatedGroups.length)
+													setFormData({
+														groupName: '',
+														lessonsTarget: { count: 1, timeScope: 'week' as const },
+														selectedTeachers: [],
+														staticTimeSlot: { dayOfWeek: 'monday', startTime: '17:00', enabled: false },
+														duration: 45,
+														distributeAcrossDays: true,
+														selectedParticipants: [],
+														preferredRoom: '',
+														notes: '',
+													})
+												} else if (currentGroupIndex > index) {
+													// Adjust index if we're editing a group after the removed one
+													setCurrentGroupIndex(currentGroupIndex - 1)
+												}
+											}}
+											variant="ghost"
+											size="sm"
+											className="text-error hover:bg-error/20"
+										>
+											Remove
+										</Button>
+									</div>
 								</div>
 							))}
 						</div>

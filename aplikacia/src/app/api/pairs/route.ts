@@ -7,41 +7,44 @@ import { cookies } from 'next/headers'
 
 // Merge two time window arrays (union) - combine all windows
 const mergeTimeWindows = (a: ITimeWindow[], b: ITimeWindow[]): ITimeWindow[] => {
-	const allWindows = [...a, ...b]
+	// Filter out invalid windows (missing start or end)
+	const validWindows = [...a, ...b].filter(w => w && w.start && w.end)
+	
+	if (validWindows.length === 0) return []
+	
+	const toMinutes = (time: string): number => {
+		if (!time || typeof time !== 'string') return 0
+		const parts = time.split(':')
+		if (parts.length < 2) return 0
+		const [h, m] = parts.map(Number)
+		return (h || 0) * 60 + (m || 0)
+	}
+	
+	const toTimeString = (minutes: number): string => {
+		const h = Math.floor(minutes / 60)
+		const m = minutes % 60
+		return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+	}
+	
 	// Sort by start time
-	allWindows.sort((w1, w2) => {
-		const toMinutes = (time: string) => {
-			const [h, m] = time.split(':').map(Number)
-			return h * 60 + m
-		}
-		return toMinutes(w1.start) - toMinutes(w2.start)
-	})
+	validWindows.sort((w1, w2) => toMinutes(w1.start) - toMinutes(w2.start))
 	
 	// Merge overlapping windows
 	const merged: ITimeWindow[] = []
-	for (const window of allWindows) {
+	for (const window of validWindows) {
 		if (merged.length === 0) {
-			merged.push({ ...window })
+			merged.push({ start: window.start, end: window.end })
 		} else {
 			const last = merged[merged.length - 1]
-			const toMinutes = (time: string) => {
-				const [h, m] = time.split(':').map(Number)
-				return h * 60 + m
-			}
 			const lastEnd = toMinutes(last.end)
 			const currentStart = toMinutes(window.start)
 			
 			if (currentStart <= lastEnd) {
 				// Overlapping or adjacent, merge
 				const currentEnd = toMinutes(window.end)
-				const toTimeString = (minutes: number) => {
-					const h = Math.floor(minutes / 60)
-					const m = minutes % 60
-					return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
-				}
 				last.end = toTimeString(Math.max(lastEnd, currentEnd))
 			} else {
-				merged.push({ ...window })
+				merged.push({ start: window.start, end: window.end })
 			}
 		}
 	}
@@ -59,10 +62,31 @@ const calculateCoupleUnavailability = (
 		timezone: studentA?.unavailability?.timezone || studentB?.unavailability?.timezone || 'UTC',
 	}
 
+	// Helper to get windows from either format (direct day props or nested days Map)
+	const getWindows = (unavail: any, day: string): ITimeWindow[] => {
+		if (!unavail) return []
+		// Try direct day property first (new format)
+		if (unavail[day] && Array.isArray(unavail[day])) {
+			return unavail[day]
+		}
+		// Try nested days Map format (old format)
+		if (unavail.days) {
+			// Handle Map-like object
+			if (unavail.days.get && typeof unavail.days.get === 'function') {
+				return unavail.days.get(day) || []
+			}
+			// Handle plain object
+			if (unavail.days[day] && Array.isArray(unavail.days[day])) {
+				return unavail.days[day]
+			}
+		}
+		return []
+	}
+
 	let hasUnavailability = false
 	for (const day of days) {
-		const aWindows = studentA?.unavailability?.[day] || []
-		const bWindows = studentB?.unavailability?.[day] || []
+		const aWindows = getWindows(studentA?.unavailability, day)
+		const bWindows = getWindows(studentB?.unavailability, day)
 		
 		if (aWindows.length > 0 || bWindows.length > 0) {
 			const merged = mergeTimeWindows(aWindows, bWindows)
@@ -109,21 +133,31 @@ export async function GET(request: NextRequest) {
 			.populate('preferredTeacherId', 'firstName lastName')
 			.sort({ createdAt: -1 })
 
-		// Calculate couple unavailability for each pair
+		// Calculate couple unavailability for each pair using the populated student data
 		const pairsWithUnavailability = await Promise.all(
 			pairs.map(async (pair) => {
+				// Convert the pair to a plain object to properly access nested properties
 				const pairObj = pair.toObject()
-				if (pairObj.studentAId && pairObj.studentBId) {
-					const studentA = await User.findById(pairObj.studentAId._id || pairObj.studentAId)
-					const studentB = await User.findById(pairObj.studentBId._id || pairObj.studentBId)
-					if (studentA && studentB) {
-						const coupleUnavailability = calculateCoupleUnavailability(studentA, studentB)
-						// Update the pair with calculated unavailability (even if undefined)
-						pair.unavailability = coupleUnavailability
-						await pair.save()
+				const studentA = pairObj.studentAId as any
+				const studentB = pairObj.studentBId as any
+				
+				let calculatedUnavailability = pairObj.unavailability
+				
+				if (studentA && studentB && studentA.firstName && studentB.firstName) {
+					// Calculate couple unavailability from populated student data
+					calculatedUnavailability = calculateCoupleUnavailability(studentA, studentB)
+					
+					// Update the pair in the database with calculated unavailability
+					if (calculatedUnavailability) {
+						await Pair.findByIdAndUpdate(pair._id, { unavailability: calculatedUnavailability })
 					}
 				}
-				return pair
+				
+				// Return the pair with populated student data AND calculated unavailability
+				return {
+					...pairObj,
+					unavailability: calculatedUnavailability
+				}
 			})
 		)
 

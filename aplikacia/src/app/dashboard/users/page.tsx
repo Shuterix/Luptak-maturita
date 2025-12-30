@@ -1,4 +1,6 @@
 // app/dashboard/users/page.tsx
+'use client'
+import { useState, useEffect } from 'react'
 import {
 	User,
 	Mail,
@@ -7,57 +9,50 @@ import {
 	Shield,
 	MoreHorizontal,
 } from 'lucide-react'
+import { useAuth } from '@/app/contexts/AuthContext'
 
-// Mock user data - replace with your actual data fetching
-const mockUsers = [
-	{
-		id: 1,
-		name: 'John Doe',
-		email: 'john@example.com',
-		phone: '+1 (555) 123-4567',
-		role: 'Admin',
-		status: 'active',
-		joined: '2023-01-15',
-	},
-	{
-		id: 2,
-		name: 'Jane Smith',
-		email: 'jane@example.com',
-		phone: '+1 (555) 987-6543',
-		role: 'User',
-		status: 'active',
-		joined: '2023-02-20',
-	},
-	{
-		id: 3,
-		name: 'Robert Johnson',
-		email: 'robert@example.com',
-		phone: '+1 (555) 456-7890',
-		role: 'Editor',
-		status: 'inactive',
-		joined: '2023-03-10',
-	},
-	{
-		id: 4,
-		name: 'Emily Davis',
-		email: 'emily@example.com',
-		phone: '+1 (555) 789-0123',
-		role: 'User',
-		status: 'active',
-		joined: '2023-04-05',
-	},
-	{
-		id: 5,
-		name: 'Michael Wilson',
-		email: 'michael@example.com',
-		phone: '+1 (555) 234-5678',
-		role: 'User',
-		status: 'pending',
-		joined: '2023-05-12',
-	},
-]
+interface UserData {
+	_id: string
+	firstName: string
+	lastName: string
+	email: string
+	role: string
+	createdAt?: string
+}
 
 export default function UsersPage() {
+	const { user } = useAuth()
+	const [users, setUsers] = useState<UserData[]>([])
+	const [loading, setLoading] = useState(true)
+
+	useEffect(() => {
+		if (user?.clubId) {
+			fetchUsers()
+		}
+	}, [user?.clubId])
+
+	const fetchUsers = async () => {
+		try {
+			setLoading(true)
+			const res = await fetch(`/api/users?clubId=${user?.clubId}`, { cache: 'no-store' })
+			if (res.ok) {
+				const data = await res.json()
+				setUsers(data.users || [])
+			}
+		} catch (err) {
+			console.error('Error fetching users:', err)
+		} finally {
+			setLoading(false)
+		}
+	}
+
+	if (loading) {
+		return (
+			<div className="flex items-center justify-center min-h-screen">
+				<span className="loading loading-spinner loading-lg"></span>
+			</div>
+		)
+	}
 	return (
 		<div className="space-y-6">
 			{/* Page Header */}
@@ -84,10 +79,7 @@ export default function UsersPage() {
 									<User className="h-5 w-5" />
 									Total Users
 								</h3>
-								<p className="text-3xl font-bold mt-2">24</p>
-							</div>
-							<div className="badge badge-primary badge-lg">
-								+5 this month
+								<p className="text-3xl font-bold mt-2">{users.length}</p>
 							</div>
 						</div>
 					</div>
@@ -97,12 +89,9 @@ export default function UsersPage() {
 					<div className="card-body">
 						<h3 className="font-bold text-lg flex items-center gap-2">
 							<Shield className="h-5 w-5" />
-							Active Users
+							Students
 						</h3>
-						<p className="text-3xl font-bold mt-2">18</p>
-						<div className="text-sm text-gray-500 mt-1">
-							84% active rate
-						</div>
+						<p className="text-3xl font-bold mt-2">{users.filter(u => u.role === 'student').length}</p>
 					</div>
 				</div>
 
@@ -110,12 +99,9 @@ export default function UsersPage() {
 					<div className="card-body">
 						<h3 className="font-bold text-lg flex items-center gap-2">
 							<Calendar className="h-5 w-5" />
-							New This Month
+							Trainers
 						</h3>
-						<p className="text-3xl font-bold mt-2">5</p>
-						<div className="text-sm text-gray-500 mt-1">
-							+2 from last month
-						</div>
+						<p className="text-3xl font-bold mt-2">{users.filter(u => u.role === 'trainer').length}</p>
 					</div>
 				</div>
 			</div>
@@ -147,115 +133,97 @@ export default function UsersPage() {
 
 							{/* Table Body */}
 							<tbody>
-								{mockUsers.map((user) => (
-									<tr key={user.id}>
-										<td>
-											<label>
-												<input
-													type="checkbox"
-													className="checkbox"
-												/>
-											</label>
-										</td>
-										<td>
-											<div className="flex items-center gap-3">
-												<div className="avatar placeholder">
-													<div className="bg-neutral text-neutral-content rounded-full w-10">
-														<span className="text-xs">
-															{user.name
-																.split(' ')
-																.map(
-																	(n) => n[0],
-																)
-																.join('')}
-														</span>
-													</div>
-												</div>
-												<div>
-													<div className="font-bold">
-														{user.name}
-													</div>
-													<div className="text-sm text-gray-500">
-														ID: {user.id}
-													</div>
-												</div>
-											</div>
-										</td>
-										<td>
-											<div className="flex flex-col gap-1">
-												<div className="flex items-center gap-2">
-													<Mail className="h-4 w-4" />
-													<span>{user.email}</span>
-												</div>
-												<div className="flex items-center gap-2">
-													<Phone className="h-4 w-4" />
-													<span>{user.phone}</span>
-												</div>
-											</div>
-										</td>
-										<td>
-											<span className="badge badge-ghost">
-												{user.role}
-											</span>
-										</td>
-										<td>
-											<span
-												className={`badge ${user.status === 'active' ? 'badge-success' : user.status === 'inactive' ? 'badge-error' : 'badge-warning'}`}
-											>
-												{user.status}
-											</span>
-										</td>
-										<td>
-											<div className="flex items-center gap-2">
-												<Calendar className="h-4 w-4" />
-												{user.joined}
-											</div>
-										</td>
-										<td>
-											<div className="dropdown dropdown-end">
-												<div
-													tabIndex={0}
-													role="button"
-													className="btn btn-ghost btn-xs"
-												>
-													<MoreHorizontal className="h-4 w-4" />
-												</div>
-												<ul
-													tabIndex={0}
-													className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
-												>
-													<li>
-														<a>Edit</a>
-													</li>
-													<li>
-														<a>View Profile</a>
-													</li>
-													<li>
-														<a className="text-error">
-															Delete
-														</a>
-													</li>
-												</ul>
-											</div>
+								{users.length === 0 ? (
+									<tr>
+										<td colSpan={7} className="text-center py-8 text-base-content/60">
+											No users found
 										</td>
 									</tr>
-								))}
+								) : (
+									users.map((dbUser) => (
+										<tr key={dbUser._id}>
+											<td>
+												<label>
+													<input
+														type="checkbox"
+														className="checkbox"
+													/>
+												</label>
+											</td>
+											<td>
+												<div className="flex items-center gap-3">
+													<div className="avatar placeholder">
+														<div className="bg-neutral text-neutral-content rounded-full w-10">
+															<span className="text-xs">
+																{`${dbUser.firstName?.[0] || ''}${dbUser.lastName?.[0] || ''}`}
+															</span>
+														</div>
+													</div>
+													<div>
+														<div className="font-bold">
+															{`${dbUser.firstName} ${dbUser.lastName}`}
+														</div>
+														<div className="text-sm text-gray-500">
+															ID: {dbUser._id.slice(-8)}
+														</div>
+													</div>
+												</div>
+											</td>
+											<td>
+												<div className="flex flex-col gap-1">
+													<div className="flex items-center gap-2">
+														<Mail className="h-4 w-4" />
+														<span>{dbUser.email}</span>
+													</div>
+												</div>
+											</td>
+											<td>
+												<span className="badge badge-ghost">
+													{dbUser.role}
+												</span>
+											</td>
+											<td>
+												<span className="badge badge-success">
+													active
+												</span>
+											</td>
+											<td>
+												<div className="flex items-center gap-2">
+													<Calendar className="h-4 w-4" />
+													{dbUser.createdAt ? new Date(dbUser.createdAt).toLocaleDateString() : 'N/A'}
+												</div>
+											</td>
+											<td>
+												<div className="dropdown dropdown-end">
+													<div
+														tabIndex={0}
+														role="button"
+														className="btn btn-ghost btn-xs"
+													>
+														<MoreHorizontal className="h-4 w-4" />
+													</div>
+													<ul
+														tabIndex={0}
+														className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
+													>
+														<li>
+															<a>Edit</a>
+														</li>
+														<li>
+															<a>View Profile</a>
+														</li>
+													</ul>
+												</div>
+											</td>
+										</tr>
+									))
+								)}
 							</tbody>
 						</table>
 					</div>
 				</div>
 			</div>
 
-			{/* Pagination */}
-			<div className="flex justify-center">
-				<div className="join">
-					<button className="join-item btn">«</button>
-					<button className="join-item btn btn-active">1</button>
-					<button className="join-item btn">2</button>
-					<button className="join-item btn">3</button>
-					<button className="join-item btn">»</button>
-				</div>
-			</div>
 		</div>
 	)
 }

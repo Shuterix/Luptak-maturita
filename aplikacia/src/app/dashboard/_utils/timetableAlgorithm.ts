@@ -36,15 +36,17 @@ export interface GroupLesson {
 	groupName: string // e.g., 'juniors1', 'juniors2'
 	lessonsTarget: {
 		count: number // number of lessons
-		timeScope: 'weekend' | 'week' | 'month' // time period for the target
+		timeScope: 'weekend' | 'week' | 'month' | 'timetable' // time period for the target
 	}
 	teachers: string[] // multiple teachers can lead
 	participants: Couple[] // couples participating in this group lesson
 	staticTimeSlot?: { // optional static scheduling
 		dayOfWeek: string // 'monday', 'tuesday', etc.
 		startTime: string // 'HH:mm'
-		duration?: number // overrides default duration
+		duration?: number // overrides default duration (deprecated, use top-level duration)
 	}
+	duration?: number // Duration in minutes for all group lessons (automatic or static)
+	distributeAcrossDays?: boolean // When true, spread lessons evenly across timetable days
 	preferredRoom?: string
 	notes?: string
 }
@@ -105,6 +107,7 @@ export interface TimetableConfig {
 	lessonDuration: number
 	studentBreakAfter: number
 	teacherBreakAfter: number
+	distributeLessons?: boolean // When true, lessons are spread evenly across all days
 }
 
 const timeStringToDate = (dateStr: string, timeStr: string) => {
@@ -805,8 +808,8 @@ export function generateTimetable(
 
 		// Check if we have static time slot
 		if (groupLesson.staticTimeSlot) {
-			const { startTime, duration } = groupLesson.staticTimeSlot
-			const lessonDuration = duration || config.lessonDuration
+			const { startTime, duration: staticDuration } = groupLesson.staticTimeSlot
+			const lessonDuration = groupLesson.duration || staticDuration || config.lessonDuration
 			const lessonStart = timeStringToDate(date, startTime)
 			const lessonEnd = addMinutes(lessonStart, lessonDuration)
 
@@ -981,17 +984,21 @@ export function generateTimetable(
 					)
 
 					if (allParticipantsAvailable) {
+						// Use custom duration if set, otherwise use slot duration
+						const lessonDuration = groupLesson.duration || slot.duration
+						const lessonEnd = addMinutes(slot.start, lessonDuration)
+						
 						// Schedule the group lesson
 						timetable.push({
 							start: slot.start.toISOString(),
-							end: slot.end.toISOString(),
+							end: lessonEnd.toISOString(),
 							teachers: groupLesson.teachers,
 							teacher: availableTeacher,
 							couples: groupLesson.participants.map(p => p.name),
 							room: groupLesson.preferredRoom || teachers.find(t => t.name === availableTeacher)?.room || null,
 							type: "lesson",
 							lessonType: "group",
-							duration: slot.duration,
+							duration: lessonDuration,
 							groupName: groupLesson.groupName,
 							student: null,
 						})
@@ -1635,19 +1642,83 @@ const studentState: Record<string, {
 	})
 	
 	// Track group lesson counts across all days (for timetable timeScope)
+	// Use a unique key for each group lesson configuration to handle multiple configs with same groupName
 	const groupLessonsCount: Record<string, number> = {}
+	// Track planned distribution for group lessons that have distributeAcrossDays enabled
+	const groupLessonPlannedPerDay: Record<string, number[]> = {}
 	if (groupLessons && Array.isArray(groupLessons)) {
-		groupLessons.forEach((g: GroupLesson) => {
+		groupLessons.forEach((g: GroupLesson, index: number) => {
 			// Only track counts for timetable timeScope
 			if (g.lessonsTarget.timeScope === 'timetable') {
-				groupLessonsCount[g.groupName] = 0
+				const key = getGroupLessonKey(g, index)
+				groupLessonsCount[key] = 0
+				
+				// Pre-calculate distribution across days if distributeAcrossDays is enabled
+				// and it's not a static time slot (static slots have their own day logic)
+				if (g.distributeAcrossDays && !g.staticTimeSlot) {
+					const totalLessons = g.lessonsTarget.count
+					const totalDays = dates.length
+					const lessonsPerDay: number[] = []
+					
+					if (totalDays > 0) {
+						// Distribute lessons evenly across days
+						const basePerDay = Math.floor(totalLessons / totalDays)
+						const remainder = totalLessons % totalDays
+						
+						for (let d = 0; d < totalDays; d++) {
+							// Add 1 extra lesson to the first 'remainder' days
+							lessonsPerDay.push(basePerDay + (d < remainder ? 1 : 0))
+						}
+					}
+					
+					groupLessonPlannedPerDay[key] = lessonsPerDay
+				}
 			}
+		})
+	}
+	
+	// Pre-calculate lesson days for each student when distribution is enabled
+	// This ensures lessons are spread across the entire period, not just the first days
+	const studentLessonDays: Record<string, number[]> = {}
+	if (config.distributeLessons) {
+		students.forEach(s => {
+			const totalLessons = s.desiredLessons
+			const totalDays = dates.length
+			
+			if (totalLessons <= 0 || totalDays <= 0) {
+				studentLessonDays[s.name] = []
+				return
+			}
+			
+			// Calculate which days this student should have lessons
+			// Spread lessons evenly across all available days
+			const lessonDays: number[] = []
+			
+			if (totalLessons >= totalDays) {
+				// More lessons than days - schedule on all days
+				for (let d = 0; d < totalDays; d++) {
+					lessonDays.push(d)
+				}
+			} else {
+				// Fewer lessons than days - spread them out evenly
+				// Calculate spacing between lessons
+				const spacing = totalDays / totalLessons
+				for (let i = 0; i < totalLessons; i++) {
+					// Calculate the ideal day for this lesson
+					// Use floor to get the day index, offset by half spacing to center lessons
+					const idealDay = Math.floor(i * spacing + spacing / 2)
+					lessonDays.push(Math.min(idealDay, totalDays - 1))
+				}
+			}
+			
+			studentLessonDays[s.name] = lessonDays
 		})
 	}
 	
 	// Generate timetable for each day
 	for (let dayIndex = 0; dayIndex < dates.length; dayIndex++) {
 		const date = dates[dayIndex]
+		const remainingDays = dates.length - dayIndex
 		
 		// Create students for this day with remaining lessons (including teacher-specific)
 		const dayStudents = students.map(s => {
@@ -1660,13 +1731,43 @@ const studentState: Record<string, {
 			}
 			
 			const remainingTotalLessons = Math.max(0, studentProgress[s.name].desired - studentProgress[s.name].scheduled)
+			
+			// When distributeLessons is enabled, check if today is a scheduled lesson day for this student
+			let lessonsForToday = remainingTotalLessons
+			if (config.distributeLessons && remainingDays > 0) {
+				const scheduledDays = studentLessonDays[s.name] || []
+				const lessonsScheduledSoFar = studentProgress[s.name].scheduled
+				
+				// Count how many of this student's lesson days have passed (including today)
+				const lessonDaysUpToToday = scheduledDays.filter(d => d <= dayIndex).length
+				// How many lessons should have been scheduled by end of today
+				const targetLessonsByToday = lessonDaysUpToToday
+				// How many more lessons should we schedule today to stay on track
+				lessonsForToday = Math.max(0, Math.min(remainingTotalLessons, targetLessonsByToday - lessonsScheduledSoFar))
+				
+				// If this isn't a scheduled day but we're behind, allow catch-up
+				if (lessonsForToday === 0 && remainingTotalLessons > 0) {
+					// Check if we're behind schedule
+					const behindBy = lessonDaysUpToToday - lessonsScheduledSoFar
+					if (behindBy > 0) {
+						lessonsForToday = Math.min(remainingTotalLessons, behindBy)
+					}
+				}
+			}
+			
 			let remainingTeacherLessons: Record<string, number> | undefined
 			if (s.teacherLessons) {
 				remainingTeacherLessons = Object.entries(s.teacherLessons).reduce<Record<string, number>>((acc, [teacherName, required]) => {
 					const already = studentTeacherProgress[s.name]?.[teacherName] || 0
 					const remaining = Math.max(0, required - already)
 					if (remaining > 0) {
-						acc[teacherName] = remaining
+						// For teacher-specific lessons, also respect the distribution
+						// Limit to proportional amount based on overall lessons for today
+						const proportion = lessonsForToday > 0 && remainingTotalLessons > 0 
+							? lessonsForToday / remainingTotalLessons 
+							: 1
+						const lessonsForThisTeacher = Math.max(1, Math.ceil(remaining * proportion))
+						acc[teacherName] = Math.min(remaining, lessonsForThisTeacher)
 					}
 					return acc
 				}, {})
@@ -1674,7 +1775,7 @@ const studentState: Record<string, {
 
 			return {
 				...s,
-				desiredLessons: remainingTotalLessons,
+				desiredLessons: lessonsForToday,
 				teacherLessons: remainingTeacherLessons
 			}
 		}).filter(s => s.desiredLessons > 0 && isStudentAvailableOnDate(s, date))
@@ -1682,7 +1783,7 @@ const studentState: Record<string, {
 		
 		// Generate timetable with cross-day state tracking
 	const scheduleForDay = daySchedules[date] ?? DEFAULT_DAY_SCHEDULE
-		const dayResult = generateTimetableWithState(date, teachers, dayStudents, breaks, scheduleForDay, studentState, config, groupLessons, groupLessonsCount)
+		const dayResult = generateTimetableWithState(date, teachers, dayStudents, breaks, scheduleForDay, studentState, config, groupLessons, groupLessonsCount, groupLessonPlannedPerDay, dayIndex)
 		// Note: groupLessonsCount for timetable timeScope is updated inside generateTimetableWithState
 		
 		// Update progress
@@ -1931,6 +2032,16 @@ export function updateTimetableWithNewBreaks(
 	}
 }
 
+// Helper function to create unique key for group lesson configuration
+// This allows multiple group lessons with same groupName to be tracked separately
+function getGroupLessonKey(g: GroupLesson, index: number): string {
+	// Create unique key: groupName + staticTimeSlot info (if present) + index
+	if (g.staticTimeSlot) {
+		return `${g.groupName}__static_${g.staticTimeSlot.dayOfWeek}_${g.staticTimeSlot.startTime}_${index}`
+	}
+	return `${g.groupName}__auto_${index}`
+}
+
 // Helper function to generate timetable with cross-day state tracking
 function generateTimetableWithState(
 	date: string,
@@ -1945,7 +2056,9 @@ function generateTimetableWithState(
 	}>,
 	config: TimetableConfig = { lessonDuration: DEFAULT_SETTINGS.lessonDuration, studentBreakAfter: DEFAULT_SETTINGS.studentBreakAfter, teacherBreakAfter: DEFAULT_SETTINGS.teacherBreakAfter },
 	groupLessons: GroupLesson[] = [],
-	groupLessonsCount: Record<string, number> = {}
+	groupLessonsCount: Record<string, number> = {},
+	groupLessonPlannedPerDay: Record<string, number[]> = {},
+	dayIndex: number = 0
 ): { date: string; lessons: TimetableLesson[]; error?: string; warning?: string } {
 	const timetable: TimetableLesson[] = []
 	const studentLessonsCount: Record<string, number> = {}
@@ -2084,7 +2197,8 @@ function generateTimetableWithState(
 	})
 
 	// Schedule group lessons first (highest priority)
-	for (const groupLesson of groupLessons) {
+	for (let groupIndex = 0; groupIndex < groupLessons.length; groupIndex++) {
+		const groupLesson = groupLessons[groupIndex]
 		// Calculate target based on time scope
 		// Parse date as local time to avoid timezone issues
 		const dateObj = parse(date, 'yyyy-MM-dd', new Date())
@@ -2107,10 +2221,13 @@ function generateTimetableWithState(
 		
 		if (!shouldSchedule) continue
 		
+		// Get unique key for this group lesson configuration
+		const groupLessonKey = getGroupLessonKey(groupLesson, groupIndex)
+		
 		// Check if we've met the target for this group
 		// For timetable timeScope, use the cross-day count; for others, use local count
 		const countToCheck = groupLesson.lessonsTarget.timeScope === 'timetable' 
-			? (groupLessonsCount[groupLesson.groupName] || 0)
+			? (groupLessonsCount[groupLessonKey] || 0)
 			: (localGroupLessonsCount[groupLesson.groupName] || 0)
 		if (countToCheck >= groupLesson.lessonsTarget.count) {
 			continue
@@ -2127,8 +2244,8 @@ function generateTimetableWithState(
 				continue
 			}
 			
-			const { startTime, duration } = groupLesson.staticTimeSlot
-			const lessonDuration = duration || config.lessonDuration
+			const { startTime, duration: staticDuration } = groupLesson.staticTimeSlot
+			const lessonDuration = groupLesson.duration || staticDuration || config.lessonDuration
 			const lessonStart = timeStringToDate(date, startTime)
 			const lessonEnd = addMinutes(lessonStart, lessonDuration)
 
@@ -2219,7 +2336,7 @@ function generateTimetableWithState(
 
 						// Update count based on timeScope
 						if (groupLesson.lessonsTarget.timeScope === 'timetable') {
-							groupLessonsCount[groupLesson.groupName] = (groupLessonsCount[groupLesson.groupName] || 0) + 1
+							groupLessonsCount[groupLessonKey] = (groupLessonsCount[groupLessonKey] || 0) + 1
 						} else {
 							localGroupLessonsCount[groupLesson.groupName] = (localGroupLessonsCount[groupLesson.groupName] || 0) + 1
 						}
@@ -2233,8 +2350,37 @@ function generateTimetableWithState(
 				}
 			}
 		} else {
-			// Automatic scheduling - find available slot
+			// Automatic scheduling - find available slots until target is met
 			for (const slot of allSlots) {
+				// Decrement teacher cooldowns at the start of each slot iteration
+				for (const t of Object.keys(teacherCooldown)) {
+					if (teacherCooldown[t] > 0) teacherCooldown[t]--
+				}
+				
+				// Check if we've already met the target for this group lesson on this day
+				// For timetable timeScope, check cross-day count; for others, check local count
+				const currentCount = groupLesson.lessonsTarget.timeScope === 'timetable' 
+					? (groupLessonsCount[groupLessonKey] || 0)
+					: (localGroupLessonsCount[groupLesson.groupName] || 0)
+				
+				if (currentCount >= groupLesson.lessonsTarget.count) {
+					break // Target met, move to next group lesson
+				}
+				
+				// Check if we've hit the daily limit for this group lesson (when distributeAcrossDays is enabled)
+				const plannedPerDay = groupLessonPlannedPerDay[groupLessonKey]
+				if (plannedPerDay && plannedPerDay.length > dayIndex) {
+					// Count how many lessons we've scheduled today for this group
+					const lessonsScheduledToday = timetable.filter(
+						l => l.lessonType === 'group' && l.groupName === groupLesson.groupName
+					).length
+					const maxForToday = plannedPerDay[dayIndex] || 0
+					
+					if (lessonsScheduledToday >= maxForToday) {
+						break // Daily limit reached, move to next group lesson
+					}
+				}
+				
 				// Find available teacher
 				const availableTeacher = groupLesson.teachers.find(teacherName => {
 					const teacher = teachers.find(t => t.name === teacherName)
@@ -2298,24 +2444,28 @@ function generateTimetableWithState(
 					)
 
 					if (allParticipantsAvailable) {
+						// Use custom duration if set, otherwise use slot duration
+						const lessonDuration = groupLesson.duration || slot.duration
+						const lessonEnd = addMinutes(slot.start, lessonDuration)
+						
 						// Schedule the group lesson
 						timetable.push({
 							start: slot.start.toISOString(),
-							end: slot.end.toISOString(),
+							end: lessonEnd.toISOString(),
 							teachers: groupLesson.teachers,
 							teacher: availableTeacher,
 							couples: groupLesson.participants.map(p => p.name),
 							room: groupLesson.preferredRoom || teachers.find(t => t.name === availableTeacher)?.room || null,
 							type: "lesson",
 							lessonType: "group",
-							duration: slot.duration,
+							duration: lessonDuration,
 							groupName: groupLesson.groupName,
 							student: null,
 						})
 
 						// Update count based on timeScope
 						if (groupLesson.lessonsTarget.timeScope === 'timetable') {
-							groupLessonsCount[groupLesson.groupName] = (groupLessonsCount[groupLesson.groupName] || 0) + 1
+							groupLessonsCount[groupLessonKey] = (groupLessonsCount[groupLessonKey] || 0) + 1
 						} else {
 							localGroupLessonsCount[groupLesson.groupName] = (localGroupLessonsCount[groupLesson.groupName] || 0) + 1
 						}
@@ -2326,7 +2476,8 @@ function generateTimetableWithState(
 							coupleLessonsCount[couple.name] = (coupleLessonsCount[couple.name] || 0) + 1
 						})
 
-						break // Found a slot, move to next group lesson
+						// Continue to next slot to try scheduling more lessons (don't break here)
+						// The loop will check the count at the start of next iteration
 					}
 				}
 			}
@@ -2337,7 +2488,7 @@ function generateTimetableWithState(
 	for (const slot of allSlots) {
 		// CRITICAL: Skip this slot if it conflicts with any group lesson static time slot
 		// Group lessons have absolute priority and should reserve their slots
-		const conflictsWithGroupLesson = groupLessons.some(groupLesson => {
+		const conflictsWithGroupLesson = groupLessons.some((groupLesson, groupIndex) => {
 			if (!groupLesson.staticTimeSlot) return false
 			
 			// Check if this group lesson should be scheduled today
@@ -2359,15 +2510,18 @@ function generateTimetableWithState(
 			// Check if day matches
 			if (groupLesson.staticTimeSlot.dayOfWeek !== dayOfWeek) return false
 			
+			// Get unique key for this group lesson configuration
+			const groupLessonKey = getGroupLessonKey(groupLesson, groupIndex)
+			
 			// Check if we've met the target (for timetable timeScope, use cross-day count)
 			const countToCheck = groupLesson.lessonsTarget.timeScope === 'timetable' 
-				? (groupLessonsCount[groupLesson.groupName] || 0)
+				? (groupLessonsCount[groupLessonKey] || 0)
 				: (localGroupLessonsCount[groupLesson.groupName] || 0)
 			if (countToCheck >= groupLesson.lessonsTarget.count) return false
 			
 			// Check if this slot overlaps with the group lesson's static time
-			const { startTime, duration } = groupLesson.staticTimeSlot
-			const lessonDuration = duration || config.lessonDuration
+			const { startTime, duration: staticDuration } = groupLesson.staticTimeSlot
+			const lessonDuration = groupLesson.duration || staticDuration || config.lessonDuration
 			const groupLessonStart = timeStringToDate(date, startTime)
 			const groupLessonEnd = addMinutes(groupLessonStart, lessonDuration)
 			

@@ -5,12 +5,11 @@ import {
 	Home,
 	Settings,
 	LogOut,
-	User,
 	HelpCircle,
 	Shield,
 	CircleUser,
 	Users,
-	Clock,
+	Calendar,
 } from 'lucide-react'
 import { ActionButton } from './ActionButton'
 import { LogoutButton } from './LogoutButton'
@@ -34,10 +33,10 @@ export default function Sidebar() {
 			icon: <Home className="h-5 w-5" />,
 		},
 		{
-			name: 'Users',
-			href: '/dashboard/users',
-			icon: <User className="h-5 w-5" />,
-			roles: ['trainer', 'admin'],
+			name: 'My Schedule',
+			href: '/dashboard/students',
+			icon: <Calendar className="h-5 w-5" />,
+			roles: ['student'],
 		},
 		{
 			name: 'Couples',
@@ -46,13 +45,13 @@ export default function Sidebar() {
 			roles: ['trainer', 'admin'],
 		},
 		{
-			name: 'Profile',
+			name: 'Profile & Availability',
 			href: '/dashboard/profile',
 			icon: <CircleUser className="h-5 w-5" />,
 			roles: ['trainer', 'admin'],
 		},
 		{
-			name: 'Profile',
+			name: 'Profile & Availability',
 			href: '/dashboard/students/profile',
 			icon: <CircleUser className="h-5 w-5" />,
 			roles: ['student'],

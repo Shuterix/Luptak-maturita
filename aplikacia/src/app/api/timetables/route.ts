@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { Types } from 'mongoose'
 import connectToDatabase from '@/lib/mongodb'
 import Timetable from '@/models/Timetable'

@@ -43,10 +43,10 @@ const mapLessonPayload = (lesson: any): LessonPayload => ({
 	breakType: lesson.breakType,
 })
 
-export async function GET(request: NextRequest, { params }: { params: { timetableId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ timetableId: string }> }) {
 	try {
 		await connectToDatabase()
-		const { timetableId } = params
+		const { timetableId } = await params
 		if (!Types.ObjectId.isValid(timetableId)) {
 			return NextResponse.json({ message: 'Invalid timetableId' }, { status: 400 })
 		}
@@ -67,10 +67,62 @@ export async function GET(request: NextRequest, { params }: { params: { timetabl
 	}
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { timetableId: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ timetableId: string }> }) {
 	try {
 		await connectToDatabase()
-		const { timetableId } = params
+		const { timetableId } = await params
+		if (!Types.ObjectId.isValid(timetableId)) {
+			return NextResponse.json({ message: 'Invalid timetableId' }, { status: 400 })
+		}
+
+		const body = await request.json()
+
+		// Validate required fields
+		if (!body.name || !body.clubId) {
+			return NextResponse.json({ message: 'Missing required fields: name and clubId' }, { status: 400 })
+		}
+
+		// Build the update object for full replacement
+		const updateData: Record<string, unknown> = {
+			name: body.name,
+			type: body.type || 'camp',
+			clubId: ensureObjectId(body.clubId),
+			startDate: body.startDate || '',
+			endDate: body.endDate || '',
+			dayStart: body.dayStart || '08:00',
+			dayEnd: body.dayEnd || '20:00',
+			defaultLessonDuration: body.defaultLessonDuration || 45,
+			slotMinutes: body.slotMinutes || 15,
+			settings: body.settings || {},
+			updatedAt: new Date(),
+		}
+
+		// Map lessons if provided
+		if (Array.isArray(body.lessons)) {
+			updateData.lessons = body.lessons.map(mapLessonPayload)
+		}
+
+		const updated = await Timetable.findByIdAndUpdate(
+			timetableId,
+			{ $set: updateData },
+			{ new: true }
+		).lean()
+
+		if (!updated) {
+			return NextResponse.json({ message: 'Timetable not found' }, { status: 404 })
+		}
+
+		return NextResponse.json({ timetable: updated })
+	} catch (error) {
+		console.error('[PUT_TIMETABLE]', error)
+		return NextResponse.json({ message: 'Failed to update timetable' }, { status: 500 })
+	}
+}
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ timetableId: string }> }) {
+	try {
+		await connectToDatabase()
+		const { timetableId } = await params
 		if (!Types.ObjectId.isValid(timetableId)) {
 			return NextResponse.json({ message: 'Invalid timetableId' }, { status: 400 })
 		}
@@ -134,10 +186,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { timeta
 	}
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { timetableId: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ timetableId: string }> }) {
 	try {
 		await connectToDatabase()
-		const { timetableId } = params
+		const { timetableId } = await params
 		if (!Types.ObjectId.isValid(timetableId)) {
 			return NextResponse.json({ message: 'Invalid timetableId' }, { status: 400 })
 		}

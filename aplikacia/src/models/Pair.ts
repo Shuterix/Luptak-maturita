@@ -5,9 +5,16 @@ export interface ITimeWindow {
 	end: string
 }
 
+// Match the User model's IWeeklyAvailability format (direct day properties)
 export interface IWeeklyAvailability {
-	timezone: string
-	days: Map<string, ITimeWindow[]>
+	timezone?: string
+	monday?: ITimeWindow[]
+	tuesday?: ITimeWindow[]
+	wednesday?: ITimeWindow[]
+	thursday?: ITimeWindow[]
+	friday?: ITimeWindow[]
+	saturday?: ITimeWindow[]
+	sunday?: ITimeWindow[]
 	exceptions?: {
 		date: string
 		windows: ITimeWindow[]
@@ -33,14 +40,17 @@ const TimeWindowSchema = new Schema<ITimeWindow>(
 	{ _id: false },
 )
 
-const UnavailabilitySchema = new Schema<IWeeklyAvailability>(
+// Use the same format as User model (direct day properties, not nested Map)
+const UnavailabilitySchema = new Schema(
 	{
 		timezone: { type: String, default: 'UTC' },
-		days: {
-			type: Map,
-			of: [TimeWindowSchema],
-			default: () => new Map<string, ITimeWindow[]>(),
-		},
+		monday: [TimeWindowSchema],
+		tuesday: [TimeWindowSchema],
+		wednesday: [TimeWindowSchema],
+		thursday: [TimeWindowSchema],
+		friday: [TimeWindowSchema],
+		saturday: [TimeWindowSchema],
+		sunday: [TimeWindowSchema],
 		exceptions: [
 			{
 				date: { type: String, required: true },

@@ -94,10 +94,11 @@ async function getCurrentUser() {
 
 export async function PUT(
 	request: NextRequest,
-	{ params }: { params: { pairId: string } }
+	{ params }: { params: Promise<{ pairId: string }> }
 ) {
 	try {
 		await connectDB()
+		const { pairId } = await params
 		const user = await getCurrentUser()
 		if (!user) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -106,7 +107,7 @@ export async function PUT(
 			return NextResponse.json({ error: 'User not in a club' }, { status: 403 })
 		}
 
-		const pair = await Pair.findById(params.pairId)
+		const pair = await Pair.findById(pairId)
 		if (!pair) {
 			return NextResponse.json({ error: 'Pair not found' }, { status: 404 })
 		}
@@ -145,13 +146,13 @@ export async function PUT(
 			// Check if either student is already in another pair
 			const existingPairA = await Pair.findOne({
 				clubId: user.clubId,
-				_id: { $ne: params.pairId },
+				_id: { $ne: pairId },
 				$or: [{ studentAId: newStudentAId }, { studentBId: newStudentAId }],
 			})
 
 			const existingPairB = await Pair.findOne({
 				clubId: user.clubId,
-				_id: { $ne: params.pairId },
+				_id: { $ne: pairId },
 				$or: [{ studentAId: newStudentBId }, { studentBId: newStudentBId }],
 			})
 
@@ -196,10 +197,11 @@ export async function PUT(
 
 export async function DELETE(
 	request: NextRequest,
-	{ params }: { params: { pairId: string } }
+	{ params }: { params: Promise<{ pairId: string }> }
 ) {
 	try {
 		await connectDB()
+		const { pairId } = await params
 		const user = await getCurrentUser()
 		if (!user) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -208,7 +210,7 @@ export async function DELETE(
 			return NextResponse.json({ error: 'User not in a club' }, { status: 403 })
 		}
 
-		const pair = await Pair.findById(params.pairId)
+		const pair = await Pair.findById(pairId)
 		if (!pair) {
 			return NextResponse.json({ error: 'Pair not found' }, { status: 404 })
 		}
@@ -217,7 +219,7 @@ export async function DELETE(
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 		}
 
-		await Pair.findByIdAndDelete(params.pairId)
+		await Pair.findByIdAndDelete(pairId)
 
 		return NextResponse.json({ message: 'Pair deleted successfully' })
 	} catch (error: any) {

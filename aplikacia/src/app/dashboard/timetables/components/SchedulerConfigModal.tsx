@@ -33,6 +33,20 @@ interface DbCouple {
 	unavailability?: any
 }
 
+interface DbTeacher {
+	_id: string
+	firstName: string
+	lastName: string
+	email: string
+	unavailability?: any
+}
+
+interface TeacherConfig {
+	teacherId: string
+	maxLessonsPerDay: number
+	room: string
+}
+
 interface CoupleConfig {
 	coupleId: string
 	desiredLessons: number
@@ -46,6 +60,7 @@ interface SchedulerConfigModalProps {
 	teachers: TeacherForm[]
 	couples: CoupleForm[]
 	dbCouples?: DbCouple[]
+	dbTeachers?: DbTeacher[]
 	breaks: string
 	lessonDuration: number
 	studentBreakAfter: number
@@ -53,10 +68,12 @@ interface SchedulerConfigModalProps {
 	dayStart?: string
 	dayEnd?: string
 	includeWeekends?: boolean
+	distributeLessons?: boolean
 	onSave: (config: {
 		teachers: TeacherForm[]
 		couples: CoupleForm[]
 		coupleConfigs: CoupleConfig[]
+		teacherConfigs: TeacherConfig[]
 		breaks: string
 		lessonDuration: number
 		studentBreakAfter: number
@@ -64,6 +81,7 @@ interface SchedulerConfigModalProps {
 		dayStart: string
 		dayEnd: string
 		includeWeekends: boolean
+		distributeLessons: boolean
 	}) => void
 	onAddTeacher: () => void
 	onRemoveTeacher: (id: string) => void
@@ -86,6 +104,7 @@ export function SchedulerConfigModal({
 	teachers,
 	couples,
 	dbCouples = [],
+	dbTeachers = [],
 	breaks,
 	lessonDuration,
 	studentBreakAfter,
@@ -93,6 +112,7 @@ export function SchedulerConfigModal({
 	dayStart = '15:00',
 	dayEnd = '20:00',
 	includeWeekends = true,
+	distributeLessons = true,
 	onSave,
 	onAddTeacher,
 	onRemoveTeacher,
@@ -104,14 +124,34 @@ export function SchedulerConfigModal({
 	const convertUnavailabilityToString = (unavailability: any): string => {
 		if (!unavailability) return 'Available anytime'
 		
+		// Helper to get windows from either format (direct day props or nested days Map)
+		const getWindowsForDay = (day: string): Array<{ start: string; end: string }> => {
+			// Try direct day property first (new format)
+			if (unavailability[day] && Array.isArray(unavailability[day])) {
+				return unavailability[day]
+			}
+			// Try nested days Map format (old format from Pair model)
+			if (unavailability.days) {
+				// Handle Map-like object
+				if (unavailability.days.get && typeof unavailability.days.get === 'function') {
+					return unavailability.days.get(day) || []
+				}
+				// Handle plain object
+				if (unavailability.days[day] && Array.isArray(unavailability.days[day])) {
+					return unavailability.days[day]
+				}
+			}
+			return []
+		}
+		
 		const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
 		const result: string[] = []
 		
 		for (const day of days) {
-			const windows = unavailability[day] || []
+			const windows = getWindowsForDay(day)
 			for (const window of windows) {
 				if (window.start && window.end) {
-					result.push(`${window.start}-${window.end}`)
+					result.push(`${day.slice(0, 3)}: ${window.start}-${window.end}`)
 				}
 			}
 		}
@@ -126,7 +166,9 @@ export function SchedulerConfigModal({
 	const [localDayStart, setLocalDayStart] = useState(dayStart)
 	const [localDayEnd, setLocalDayEnd] = useState(dayEnd)
 	const [localIncludeWeekends, setLocalIncludeWeekends] = useState(includeWeekends)
+	const [localDistributeLessons, setLocalDistributeLessons] = useState(distributeLessons)
 	const [coupleConfigs, setCoupleConfigs] = useState<Record<string, CoupleConfig>>({})
+	const [teacherConfigs, setTeacherConfigs] = useState<Record<string, TeacherConfig>>({})
 	const [error, setError] = useState<string | null>(null)
 	const [expandedTeachers, setExpandedTeachers] = useState<Set<string>>(new Set())
 	const [expandedCouples, setExpandedCouples] = useState<Set<string>>(new Set())
@@ -159,10 +201,10 @@ export function SchedulerConfigModal({
 					// Use saved config with all its properties (desiredLessons, priority, teacherLessons)
 					initialConfigs[pair._id] = savedConfigsMap[pair._id]
 				} else {
-					// Use default config for new couples
+					// Use default config for new couples - prefer couple's preferred teacher, else first db teacher
 					const teacherName = pair.preferredTeacherId 
 						? `${pair.preferredTeacherId.firstName} ${pair.preferredTeacherId.lastName}`
-						: teachers.length > 0 ? teachers[0].name : ''
+						: dbTeachers.length > 0 ? `${dbTeachers[0].firstName} ${dbTeachers[0].lastName}` : ''
 					initialConfigs[pair._id] = {
 						coupleId: pair._id,
 						desiredLessons: 2,
@@ -173,7 +215,44 @@ export function SchedulerConfigModal({
 			})
 			setCoupleConfigs(initialConfigs)
 		}
-	}, [isOpen, dbCouples.length, teachers.length])
+	}, [isOpen, dbCouples.length, dbTeachers.length])
+
+	// Initialize teacher configs when modal opens or dbTeachers change
+	useEffect(() => {
+		if (isOpen && dbTeachers.length > 0) {
+			// Try to load saved teacher configs from localStorage
+			const savedConfigsStr = typeof window !== 'undefined' ? window.localStorage.getItem('teacherConfigs') : null
+			let savedConfigsMap: Record<string, TeacherConfig> = {}
+			
+			if (savedConfigsStr) {
+				try {
+					const savedConfigsArray = JSON.parse(savedConfigsStr) as TeacherConfig[]
+					savedConfigsArray.forEach((config) => {
+						if (config.teacherId) {
+							savedConfigsMap[config.teacherId] = config
+						}
+					})
+				} catch (e) {
+					console.error('Failed to parse saved teacher configs:', e)
+				}
+			}
+
+			// Start with saved configs, then add defaults for any teachers that don't have saved configs
+			const initialConfigs: Record<string, TeacherConfig> = {}
+			dbTeachers.forEach((teacher, index) => {
+				if (savedConfigsMap[teacher._id]) {
+					initialConfigs[teacher._id] = savedConfigsMap[teacher._id]
+				} else {
+					initialConfigs[teacher._id] = {
+						teacherId: teacher._id,
+						maxLessonsPerDay: 4,
+						room: `Room ${String.fromCharCode(65 + index)}`, // Room A, B, C, etc.
+					}
+				}
+			})
+			setTeacherConfigs(initialConfigs)
+		}
+	}, [isOpen, dbTeachers.length])
 
 	// Update local day times when props change
 	useEffect(() => {
@@ -196,12 +275,8 @@ export function SchedulerConfigModal({
 		setError(null)
 		switch (step) {
 			case 'teachers':
-				if (teachers.length === 0) {
-					setError('Add at least one teacher')
-					return false
-				}
-				if (teachers.some((t) => !t.name.trim())) {
-					setError('All teachers must have a name')
+				if (dbTeachers.length === 0) {
+					setError('No teachers found in your club. Please add trainers to your club first.')
 					return false
 				}
 				return true
@@ -240,10 +315,18 @@ export function SchedulerConfigModal({
 
 	const handleSave = () => {
 		if (!validateStep('review')) return
+		
+		// Save teacher configs to localStorage
+		const teacherConfigsArray = Object.values(teacherConfigs)
+		if (typeof window !== 'undefined') {
+			window.localStorage.setItem('teacherConfigs', JSON.stringify(teacherConfigsArray))
+		}
+		
 		onSave({
 			teachers,
 			couples,
 			coupleConfigs: Object.values(coupleConfigs),
+			teacherConfigs: teacherConfigsArray,
 			breaks: localBreaks,
 			lessonDuration: localLessonDuration,
 			studentBreakAfter: localStudentBreakAfter,
@@ -251,6 +334,7 @@ export function SchedulerConfigModal({
 			dayStart: localDayStart,
 			dayEnd: localDayEnd,
 			includeWeekends: localIncludeWeekends,
+			distributeLessons: localDistributeLessons,
 		})
 		onClose()
 		setCurrentStep('teachers')
@@ -318,117 +402,113 @@ export function SchedulerConfigModal({
 							<div className="space-y-4">
 								<div className="space-y-1">
 									<h3 className="text-lg font-semibold text-base-content">Teachers</h3>
-									<p className="text-sm text-base-content/60">Configure teacher availability and preferences.</p>
+									<p className="text-sm text-base-content/60">
+										Teachers from your club. Their unavailability is set in their profile.
+									</p>
 								</div>
-								<div className="flex items-center justify-between">
-									<span className="text-sm text-base-content/60">{teachers.length} teacher(s)</span>
-									<Button className="btn-ghost btn-sm" onClick={onAddTeacher}>
-										Add teacher
-									</Button>
-								</div>
-								<div className="space-y-2 max-h-[400px] overflow-y-auto">
-									{teachers.map((teacher) => {
-										const isExpanded = expandedTeachers.has(teacher.id)
-										return (
-											<div key={teacher.id} className="border border-base-300 rounded-xl bg-base-100 overflow-hidden">
-												<div className="relative">
-													<button
-														type="button"
-														onClick={() => {
-															const newExpanded = new Set(expandedTeachers)
-															if (isExpanded) {
-																newExpanded.delete(teacher.id)
-															} else {
-																newExpanded.add(teacher.id)
-															}
-															setExpandedTeachers(newExpanded)
-														}}
-														className="w-full flex items-center justify-between p-4 hover:bg-base-200 transition pr-20"
-													>
-														<div className="flex items-center gap-3">
-															<span className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
-															<span className="font-medium">{teacher.name || 'Unnamed Teacher'}</span>
-															{!teacher.availability && (
-																<span className="badge badge-sm badge-ghost">Available anytime</span>
-															)}
-														</div>
-														<div className="flex items-center gap-2">
-															{teacher.availability && (
-																<span className="text-xs text-base-content/60">Unavailable: {teacher.availability}</span>
-															)}
-														</div>
-													</button>
-													{teachers.length > 1 && (
+								
+								{dbTeachers.length > 0 ? (
+									<>
+										<div className="flex items-center justify-between">
+											<span className="text-sm text-base-content/60">{dbTeachers.length} teacher(s) in club</span>
+										</div>
+										<div className="space-y-2 max-h-[400px] overflow-y-auto">
+											{dbTeachers.map((teacher) => {
+												const teacherName = `${teacher.firstName} ${teacher.lastName}`
+												const isExpanded = expandedTeachers.has(teacher._id)
+												const unavailabilityStr = convertUnavailabilityToString(teacher.unavailability)
+												const config = teacherConfigs[teacher._id] || {
+													teacherId: teacher._id,
+													maxLessonsPerDay: 4,
+													room: '',
+												}
+												
+												return (
+													<div key={teacher._id} className="border border-base-300 rounded-xl bg-base-100 overflow-hidden">
 														<button
 															type="button"
-															className="absolute right-2 top-1/2 -translate-y-1/2 btn btn-ghost btn-sm text-error"
-															onClick={(e) => {
-																e.stopPropagation()
-																onRemoveTeacher(teacher.id)
-															}}
-														>
-															Remove
-														</button>
-													)}
-												</div>
-												{isExpanded && (
-													<div className="p-4 pt-0 space-y-3 border-t border-base-300">
-														<label className="form-control">
-															<span className="label-text">Name</span>
-															<Input
-																value={teacher.name}
-																onChange={(event) => onUpdateTeacher(teacher.id, 'name', event.target.value)}
-																placeholder="e.g. Ms. Adams"
-															/>
-														</label>
-														<label className="form-control">
-															<span className="label-text">Unavailability (comma separated intervals when CANNOT train)</span>
-															<Input
-																value={teacher.availability}
-																onChange={(event) => onUpdateTeacher(teacher.id, 'availability', event.target.value)}
-																placeholder="08:00-12:00,13:00-16:00 (leave empty if available anytime)"
-															/>
-															<span className="label-text-alt text-base-content/50">
-																Leave empty if available anytime. Format: HH:mm-HH:mm,HH:mm-HH:mm
-															</span>
-														</label>
-														<div className="grid grid-cols-2 gap-3">
-															<label className="form-control">
-																<span className="label-text">Max lessons per day</span>
-																<Input
-																	type="number"
-																	min={1}
-																	value={teacher.maxLessonsPerDay}
-																	onChange={(event) =>
-																		onUpdateTeacher(teacher.id, 'maxLessonsPerDay', Number(event.target.value))
-																	}
-																/>
-															</label>
-															<label className="form-control">
-																<span className="label-text">Room</span>
-																<Input
-																	value={teacher.room}
-																	onChange={(event) => onUpdateTeacher(teacher.id, 'room', event.target.value)}
-																	placeholder="Room A"
-																/>
-															</label>
-														</div>
-														<label className="form-control">
-															<span className="label-text">Unavailable dates (optional, YYYY-MM-DD)</span>
-															<Input
-																value={teacher.unavailableDates}
-																onChange={(event) =>
-																	onUpdateTeacher(teacher.id, 'unavailableDates', event.target.value)
+															onClick={() => {
+																const newExpanded = new Set(expandedTeachers)
+																if (isExpanded) {
+																	newExpanded.delete(teacher._id)
+																} else {
+																	newExpanded.add(teacher._id)
 																}
-																placeholder="2025-03-04,2025-03-05"
-															/>
-														</label>
+																setExpandedTeachers(newExpanded)
+															}}
+															className="w-full flex items-center justify-between p-4 hover:bg-base-200 transition"
+														>
+															<div className="flex items-center gap-3">
+																<span className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+																<span className="font-medium">{teacherName}</span>
+																{unavailabilityStr === 'Available anytime' && (
+																	<span className="badge badge-sm badge-success">Available anytime</span>
+																)}
+															</div>
+															<div className="flex items-center gap-2">
+																{unavailabilityStr !== 'Available anytime' && (
+																	<span className="text-xs text-warning">Has unavailability</span>
+																)}
+															</div>
+														</button>
+														{isExpanded && (
+															<div className="p-4 pt-0 space-y-3 border-t border-base-300">
+																<div className="text-sm">
+																	<p className="font-medium text-base-content/70 mb-1">Unavailability (from profile):</p>
+																	<p className={`text-sm ${unavailabilityStr === 'Available anytime' ? 'text-success' : 'text-warning'}`}>
+																		{unavailabilityStr}
+																	</p>
+																	<p className="text-xs text-base-content/50 mt-1">
+																		To change unavailability, the teacher must update their profile.
+																	</p>
+																</div>
+																<div className="grid grid-cols-2 gap-3">
+																	<label className="form-control">
+																		<span className="label-text">Max lessons per day</span>
+																		<Input
+																			type="number"
+																			min={1}
+																			value={config.maxLessonsPerDay}
+																			onChange={(event) => {
+																				setTeacherConfigs(prev => ({
+																					...prev,
+																					[teacher._id]: {
+																						...config,
+																						maxLessonsPerDay: Number(event.target.value) || 4,
+																					}
+																				}))
+																			}}
+																		/>
+																	</label>
+																	<label className="form-control">
+																		<span className="label-text">Room</span>
+																		<Input
+																			value={config.room}
+																			onChange={(event) => {
+																				setTeacherConfigs(prev => ({
+																					...prev,
+																					[teacher._id]: {
+																						...config,
+																						room: event.target.value,
+																					}
+																				}))
+																			}}
+																			placeholder="Room A"
+																		/>
+																	</label>
+																</div>
+															</div>
+														)}
 													</div>
-												)}
-											</div>
-										)
-									})}
-								</div>
+												)
+											})}
+										</div>
+									</>
+								) : (
+									<Alert variant="warning">
+										No teachers found in your club. Please ensure trainers are registered and added to the club.
+									</Alert>
+								)}
 							</div>
 						)}
 
@@ -445,13 +525,33 @@ export function SchedulerConfigModal({
 									<>
 										<div className="flex items-center justify-between">
 											<span className="text-sm text-base-content/60">{dbCouples.length} couple(s) from database</span>
+											<button
+												type="button"
+												onClick={() => {
+													// Close modal and reload page to trigger fresh fetch of couples
+													onClose()
+													setTimeout(() => window.location.reload(), 100)
+												}}
+												className="btn btn-xs btn-ghost gap-1 text-primary"
+												title="Refresh couple unavailability from student data"
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+												Refresh
+											</button>
 										</div>
 										<div className="space-y-2 max-h-[400px] overflow-y-auto">
 											{dbCouples.map((pair) => {
 												const studentA = pair.studentAId
 												const studentB = pair.studentBId
 												const coupleName = `${studentA.firstName} ${studentA.lastName} & ${studentB.firstName} ${studentB.lastName}`
-												const unavailabilityStr = convertUnavailabilityToString(pair.unavailability)
+												// Check both pair unavailability AND individual student unavailability
+												const studentAUnavailStr = convertUnavailabilityToString(studentA?.unavailability)
+												const studentBUnavailStr = convertUnavailabilityToString(studentB?.unavailability)
+												const pairUnavailStr = convertUnavailabilityToString(pair.unavailability)
+												// If pair doesn't have calculated unavailability but students do, show warning
+												const hasStudentUnavailability = studentAUnavailStr !== 'Available anytime' || studentBUnavailStr !== 'Available anytime'
+												const unavailabilityStr = pairUnavailStr !== 'Available anytime' ? pairUnavailStr : 
+													hasStudentUnavailability ? '⚠ Needs refresh' : 'Available anytime'
 												const config = coupleConfigs[pair._id] || {
 													coupleId: pair._id,
 													desiredLessons: 2,
@@ -488,47 +588,77 @@ export function SchedulerConfigModal({
 																)}
 															</div>
 															<div className="flex items-center gap-2">
-																{!pair.unavailability && (
+																{unavailabilityStr === 'Available anytime' && (
 																	<span className="badge badge-sm badge-ghost">Available anytime</span>
 																)}
-																{pair.unavailability && (
+																{unavailabilityStr === '⚠ Needs refresh' && (
+																	<span className="badge badge-sm badge-warning">⚠ Needs refresh</span>
+																)}
+																{unavailabilityStr !== 'Available anytime' && unavailabilityStr !== '⚠ Needs refresh' && (
 																	<span className="text-xs text-base-content/60">Unavailable: {unavailabilityStr}</span>
 																)}
 															</div>
 														</button>
 														{isExpanded && (
 															<div className="p-4 pt-0 space-y-3 border-t border-base-300">
-																<div className="space-y-2 text-sm">
-																	<div>
-																		<span className="text-base-content/60">Partner A: </span>
-																		<span className="text-base-content">{studentA.firstName} {studentA.lastName}</span>
-																		{studentA.unavailability ? (
-																			<span className="text-base-content/50 ml-2">(has unavailability set)</span>
+																<div className="space-y-3 text-sm">
+																	{/* Partner A */}
+																	<div className="bg-base-300/30 rounded-lg p-3">
+																		<div className="flex items-center justify-between mb-2">
+																			<span className="font-medium text-base-content">{studentA.firstName} {studentA.lastName}</span>
+																			<span className="badge badge-sm badge-ghost">Partner A</span>
+																		</div>
+																		{(() => {
+																			const aStr = studentAUnavailStr
+																			return aStr !== 'Available anytime' ? (
+																				<div className="space-y-1">
+																					<span className="text-error/70 text-xs font-medium">Cannot train:</span>
+																					<div className="text-xs text-base-content/70 font-mono bg-base-200 rounded px-2 py-1">
+																						{aStr}
+																					</div>
+																				</div>
+																			) : (
+																				<span className="text-success/70 text-xs">✓ Available anytime</span>
+																			)
+																		})()}
+																	</div>
+																	
+																	{/* Partner B */}
+																	<div className="bg-base-300/30 rounded-lg p-3">
+																		<div className="flex items-center justify-between mb-2">
+																			<span className="font-medium text-base-content">{studentB.firstName} {studentB.lastName}</span>
+																			<span className="badge badge-sm badge-ghost">Partner B</span>
+																		</div>
+																		{(() => {
+																			const bStr = studentBUnavailStr
+																			return bStr !== 'Available anytime' ? (
+																				<div className="space-y-1">
+																					<span className="text-error/70 text-xs font-medium">Cannot train:</span>
+																					<div className="text-xs text-base-content/70 font-mono bg-base-200 rounded px-2 py-1">
+																						{bStr}
+																					</div>
+																				</div>
+																			) : (
+																				<span className="text-success/70 text-xs">✓ Available anytime</span>
+																			)
+																		})()}
+																	</div>
+																	
+																	{/* Calculated Couple Unavailability */}
+																	<div className="pt-2 border-t border-base-300">
+																		<span className="text-base-content/60 font-medium">Combined Couple Unavailability: </span>
+																		{pairUnavailStr !== 'Available anytime' ? (
+																			<div className="mt-1 text-xs text-error/80 font-mono bg-error/10 rounded px-2 py-1 border border-error/20">
+																				{pairUnavailStr}
+																			</div>
+																		) : hasStudentUnavailability ? (
+																			<div className="mt-1 text-xs text-warning/80 font-mono bg-warning/10 rounded px-2 py-1 border border-warning/20">
+																				⚠ Not calculated yet - click Refresh
+																			</div>
 																		) : (
-																			<span className="text-base-content/50 ml-2">(available anytime)</span>
+																			<span className="text-success/70 text-sm">✓ Available anytime</span>
 																		)}
 																	</div>
-																	<div>
-																		<span className="text-base-content/60">Partner B: </span>
-																		<span className="text-base-content">{studentB.firstName} {studentB.lastName}</span>
-																		{studentB.unavailability ? (
-																			<span className="text-base-content/50 ml-2">(has unavailability set)</span>
-																		) : (
-																			<span className="text-base-content/50 ml-2">(available anytime)</span>
-																		)}
-																	</div>
-																	{pair.unavailability && (
-																		<div className="pt-2 border-t border-base-300">
-																			<span className="text-base-content/60 font-medium">Calculated Couple Unavailability: </span>
-																			<span className="text-base-content font-mono text-xs">{unavailabilityStr}</span>
-																		</div>
-																	)}
-																	{!pair.unavailability && (
-																		<div className="pt-2 border-t border-base-300">
-																			<span className="text-base-content/60 font-medium">Couple Status: </span>
-																			<span className="text-base-content">Available anytime</span>
-																		</div>
-																	)}
 																</div>
 																
 																{/* Configuration inputs */}
@@ -582,10 +712,11 @@ export function SchedulerConfigModal({
 																	
 																	<div className="space-y-2">
 																		<span className="label-text text-xs">Teacher Lessons</span>
-																		{teachers.map((teacher) => {
-																			const currentCount = config.teacherLessons[teacher.name] || 0
+																		{dbTeachers.map((teacher) => {
+																			const teacherName = `${teacher.firstName} ${teacher.lastName}`
+																			const currentCount = config.teacherLessons[teacherName] || 0
 																			return (
-																				<div key={teacher.id} className="flex items-center gap-2">
+																				<div key={teacher._id} className="flex items-center gap-2">
 																					<label className="flex items-center gap-2 flex-1">
 																						<input
 																							type="checkbox"
@@ -594,9 +725,9 @@ export function SchedulerConfigModal({
 																							onChange={(e) => {
 																								const newTeacherLessons = { ...config.teacherLessons }
 																								if (e.target.checked) {
-																									newTeacherLessons[teacher.name] = 1
+																									newTeacherLessons[teacherName] = 1
 																								} else {
-																									delete newTeacherLessons[teacher.name]
+																									delete newTeacherLessons[teacherName]
 																								}
 																								
 																								// Calculate sum of teacherLessons and update desiredLessons
@@ -607,7 +738,7 @@ export function SchedulerConfigModal({
 																								setCoupleConfigs((prev) => ({ ...prev, [pair._id]: newConfig }))
 																							}}
 																						/>
-																						<span className="text-xs text-base-content/80 flex-1">{teacher.name}</span>
+																						<span className="text-xs text-base-content/80 flex-1">{teacherName}</span>
 																					</label>
 																					{currentCount > 0 && (
 																						<Input
@@ -617,7 +748,7 @@ export function SchedulerConfigModal({
 																							value={currentCount}
 																							onChange={(e) => {
 																								const count = Math.max(1, Math.min(10, Number(e.target.value) || 1))
-																								const newTeacherLessons = { ...config.teacherLessons, [teacher.name]: count }
+																								const newTeacherLessons = { ...config.teacherLessons, [teacherName]: count }
 																								
 																								// Calculate sum of teacherLessons and update desiredLessons
 																								const teacherLessonsSum = Object.values(newTeacherLessons).reduce((sum, count) => sum + count, 0)
@@ -632,8 +763,8 @@ export function SchedulerConfigModal({
 																				</div>
 																			)
 																		})}
-																		{teachers.length === 0 && (
-																			<p className="text-xs text-base-content/50">No teachers available</p>
+																		{dbTeachers.length === 0 && (
+																			<p className="text-xs text-base-content/50">No teachers in club</p>
 																		)}
 																	</div>
 																</div>
@@ -697,6 +828,20 @@ export function SchedulerConfigModal({
 									</label>
 								</label>
 								<label className="form-control">
+									<label className="label cursor-pointer">
+										<div className="flex flex-col">
+											<span className="label-text">Distribute lessons evenly across days</span>
+											<span className="text-xs text-base-content/50">When enabled, lessons will be spread throughout the timetable period instead of being scheduled on the first available days</span>
+										</div>
+										<input
+											type="checkbox"
+											className="checkbox checkbox-primary"
+											checked={localDistributeLessons}
+											onChange={(e) => setLocalDistributeLessons(e.target.checked)}
+										/>
+									</label>
+								</label>
+								<label className="form-control">
 									<span className="label-text">Default breaks (comma separated)</span>
 									<textarea
 										className="textarea textarea-bordered"
@@ -747,14 +892,26 @@ export function SchedulerConfigModal({
 								</div>
 								<div className="space-y-4">
 									<div className="rounded-xl border border-base-300 bg-base-100 p-4">
-										<h4 className="font-semibold mb-2">Teachers ({teachers.length})</h4>
+										<h4 className="font-semibold mb-2">Teachers ({dbTeachers.length})</h4>
 										<div className="space-y-2 text-sm">
-											{teachers.map((teacher) => (
-												<div key={teacher.id} className="flex justify-between">
-													<span>{teacher.name}</span>
-													<span className="text-base-content/60">{teacher.availability}</span>
-												</div>
-											))}
+											{dbTeachers.map((teacher) => {
+												const teacherName = `${teacher.firstName} ${teacher.lastName}`
+												const unavailStr = convertUnavailabilityToString(teacher.unavailability)
+												const config = teacherConfigs[teacher._id] || { maxLessonsPerDay: 4, room: '' }
+												return (
+													<div key={teacher._id} className="flex justify-between items-start">
+														<div>
+															<span className="font-medium">{teacherName}</span>
+															<span className="text-base-content/50 ml-2">
+																(Max: {config.maxLessonsPerDay}/day, Room: {config.room || 'Not set'})
+															</span>
+														</div>
+														<span className={`text-xs ${unavailStr === 'Available anytime' ? 'text-success' : 'text-warning'}`}>
+															{unavailStr === 'Available anytime' ? '✓ Available anytime' : unavailStr}
+														</span>
+													</div>
+												)
+											})}
 										</div>
 									</div>
 									<div className="rounded-xl border border-base-300 bg-base-100 p-4">
@@ -764,7 +921,13 @@ export function SchedulerConfigModal({
 												const studentA = pair.studentAId
 												const studentB = pair.studentBId
 												const coupleName = `${studentA.firstName} ${studentA.lastName} & ${studentB.firstName} ${studentB.lastName}`
-												const unavailabilityStr = convertUnavailabilityToString(pair.unavailability)
+												// Check both pair unavailability AND individual student unavailability
+												const studentAUnavailStrSummary = convertUnavailabilityToString(studentA?.unavailability)
+												const studentBUnavailStrSummary = convertUnavailabilityToString(studentB?.unavailability)
+												const pairUnavailStrSummary = convertUnavailabilityToString(pair.unavailability)
+												const hasStudentUnavailabilitySummary = studentAUnavailStrSummary !== 'Available anytime' || studentBUnavailStrSummary !== 'Available anytime'
+												const unavailabilityStrSummary = pairUnavailStrSummary !== 'Available anytime' ? pairUnavailStrSummary : 
+													hasStudentUnavailabilitySummary ? '⚠ Needs refresh' : 'Available anytime'
 												const config = coupleConfigs[pair._id] || {
 													coupleId: pair._id,
 													desiredLessons: 2,
@@ -781,7 +944,7 @@ export function SchedulerConfigModal({
 															<div className="flex-1">
 																<p className="font-medium text-base-content">{coupleName}</p>
 																<p className="text-xs text-base-content/60 mt-1">
-																	Unavailability: {unavailabilityStr}
+																	Unavailability: {unavailabilityStrSummary}
 																</p>
 																<p className="text-xs text-base-content/60">
 																	Desired: {config.desiredLessons} lessons · Priority: {config.priority} · Teachers: {teacherLessonsStr}
@@ -822,6 +985,10 @@ export function SchedulerConfigModal({
 											<div className="flex justify-between">
 												<span>Include Weekends:</span>
 												<span className="text-base-content/60">{localIncludeWeekends ? 'Yes' : 'No'}</span>
+											</div>
+											<div className="flex justify-between">
+												<span>Distribute Lessons Evenly:</span>
+												<span className="text-base-content/60">{localDistributeLessons ? 'Yes' : 'No'}</span>
 											</div>
 										</div>
 									</div>

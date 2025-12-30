@@ -22,10 +22,11 @@ async function getCurrentUser() {
 
 export async function GET(
 	request: NextRequest,
-	{ params }: { params: { userId: string } }
+	{ params }: { params: Promise<{ userId: string }> }
 ) {
 	try {
 		await connectToDatabase()
+		const { userId } = await params
 
 		const currentUser = await getCurrentUser()
 		if (!currentUser) {
@@ -33,11 +34,11 @@ export async function GET(
 		}
 
 		// Users can only view their own availability unless they're admin/trainer
-		if (currentUser._id.toString() !== params.userId && currentUser.role !== 'admin' && currentUser.role !== 'trainer') {
+		if (currentUser._id.toString() !== userId && currentUser.role !== 'admin' && currentUser.role !== 'trainer') {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 		}
 
-		const user = await User.findById(params.userId).select('unavailability').lean()
+		const user = await User.findById(userId).select('unavailability').lean()
 		if (!user) {
 			return NextResponse.json({ error: 'User not found' }, { status: 404 })
 		}
@@ -51,10 +52,11 @@ export async function GET(
 
 export async function PATCH(
 	request: NextRequest,
-	{ params }: { params: { userId: string } }
+	{ params }: { params: Promise<{ userId: string }> }
 ) {
 	try {
 		await connectToDatabase()
+		const { userId } = await params
 
 		const currentUser = await getCurrentUser()
 		if (!currentUser) {
@@ -62,7 +64,7 @@ export async function PATCH(
 		}
 
 		// Users can only update their own availability unless they're admin
-		if (currentUser._id.toString() !== params.userId && currentUser.role !== 'admin') {
+		if (currentUser._id.toString() !== userId && currentUser.role !== 'admin') {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 		}
 
@@ -110,7 +112,7 @@ export async function PATCH(
 		// For now, we'll store it directly as unavailability structure
 		// Note: The model uses "unavailability" but we're treating it as availability windows
 		const user = await User.findByIdAndUpdate(
-			params.userId,
+			userId,
 			{ 
 				$set: { 
 					unavailability: {

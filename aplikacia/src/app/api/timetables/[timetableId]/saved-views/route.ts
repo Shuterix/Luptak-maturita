@@ -3,10 +3,10 @@ import { Types } from 'mongoose'
 import connectToDatabase from '@/lib/mongodb'
 import SavedTimetable from '@/models/SavedTimetable'
 
-export async function GET(_: NextRequest, { params }: { params: { timetableId: string } }) {
+export async function GET(_: NextRequest, { params }: { params: Promise<{ timetableId: string }> }) {
 	try {
 		await connectToDatabase()
-		const { timetableId } = params
+		const { timetableId } = await params
 		if (!Types.ObjectId.isValid(timetableId)) {
 			return NextResponse.json({ message: 'Invalid timetableId' }, { status: 400 })
 		}
@@ -27,10 +27,10 @@ interface CreateSavedViewRequest {
 	snapshot: Record<string, unknown>
 }
 
-export async function POST(request: NextRequest, { params }: { params: { timetableId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ timetableId: string }> }) {
 	try {
 		await connectToDatabase()
-		const { timetableId } = params
+		const { timetableId } = await params
 		if (!Types.ObjectId.isValid(timetableId)) {
 			return NextResponse.json({ message: 'Invalid timetableId' }, { status: 400 })
 		}

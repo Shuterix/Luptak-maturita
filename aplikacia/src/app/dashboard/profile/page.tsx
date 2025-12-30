@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { Button, Input, Alert } from '@/components'
 import { showAlertToast } from '@/components/toast/Toast'
-import { Clock, User, Users, Calendar, Save } from 'lucide-react'
+import { Clock, User, Save } from 'lucide-react'
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
 
@@ -28,22 +28,6 @@ interface WeeklyAvailability {
 	}[]
 }
 
-interface StudentPair {
-	_id: string
-	studentAId: {
-		_id: string
-		firstName: string
-		lastName: string
-		email: string
-	}
-	studentBId: {
-		_id: string
-		firstName: string
-		lastName: string
-		email: string
-	}
-}
-
 const DAY_LABELS: Record<DayOfWeek, string> = {
 	monday: 'Monday',
 	tuesday: 'Tuesday',
@@ -54,27 +38,25 @@ const DAY_LABELS: Record<DayOfWeek, string> = {
 	sunday: 'Sunday',
 }
 
-export default function StudentSettingsPage() {
+export default function TrainerProfilePage() {
 	const { user, refreshUser } = useAuth()
 	const [loading, setLoading] = useState(false)
 	const [saving, setSaving] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [success, setSuccess] = useState<string | null>(null)
 
-	// Unavailability state (times when student CANNOT train)
+	// Unavailability state (times when trainer CANNOT teach)
 	const [unavailability, setUnavailability] = useState<WeeklyAvailability>({})
-	const [pairs, setPairs] = useState<StudentPair[]>([])
-	const [currentPairId, setCurrentPairId] = useState<string | null>(null)
 
 	// Load user data and availability
 	useEffect(() => {
 		if (user) {
-			loadStudentData()
+			loadTrainerData()
 		}
 	}, [user])
 
-	const loadStudentData = async () => {
-		if (!user?._id || !user?.clubId) return
+	const loadTrainerData = async () => {
+		if (!user?._id) return
 
 		setLoading(true)
 		setError(null)
@@ -87,28 +69,10 @@ export default function StudentSettingsPage() {
 				if (userData.user?.unavailability) {
 					setUnavailability(userData.user.unavailability || {})
 				}
-				setCurrentPairId(userData.user?.partnerId || null)
 			}
-
-			// Load pairs for partner selection
-			const pairsRes = await fetch(`/api/pairs?clubId=${user.clubId}`, { cache: 'no-store' })
-			if (pairsRes.ok) {
-				const pairsData = await pairsRes.json()
-				setPairs(pairsData.pairs || [])
-
-				// Find current user's pair
-				const userPair = pairsData.pairs?.find(
-					(p: StudentPair) =>
-						p.studentAId._id === user._id || p.studentBId._id === user._id
-				)
-				if (userPair) {
-					setCurrentPairId(userPair._id)
-				}
-			}
-
 		} catch (err: any) {
-			console.error('Error loading student data:', err)
-			setError(err.message || 'Failed to load student data')
+			console.error('Error loading trainer data:', err)
+			setError(err.message || 'Failed to load trainer data')
 		} finally {
 			setLoading(false)
 		}
@@ -148,7 +112,7 @@ export default function StudentSettingsPage() {
 		setSuccess(null)
 
 		try {
-			// Save unavailability (times when student CANNOT train)
+			// Save unavailability (times when trainer CANNOT teach)
 			const res = await fetch(`/api/users/${user._id}/availability`, {
 				method: 'PATCH',
 				headers: {
@@ -179,10 +143,10 @@ export default function StudentSettingsPage() {
 	}
 
 
-	if (!user || user.role !== 'student') {
+	if (!user || (user.role !== 'trainer' && user.role !== 'admin')) {
 		return (
 			<div className="flex items-center justify-center h-64">
-				<Alert variant="error">This page is only available for students.</Alert>
+				<Alert variant="error">This page is only available for trainers and admins.</Alert>
 			</div>
 		)
 	}
@@ -201,7 +165,7 @@ export default function StudentSettingsPage() {
 			<div className="flex items-center justify-between">
 				<h1 className="text-3xl font-bold flex items-center gap-2">
 					<User className="h-8 w-8 text-primary" />
-					Profile
+					Trainer Profile
 				</h1>
 			</div>
 
@@ -225,8 +189,8 @@ export default function StudentSettingsPage() {
 						Weekly Unavailability
 					</h2>
 					<p className="text-sm text-base-content/70 mb-6">
-						Set the times when you <strong>CANNOT</strong> train (e.g., school hours, work). 
-						Leave empty if you're available anytime. Teachers will schedule your lessons outside these times.
+						Set the times when you <strong>CANNOT</strong> teach (e.g., other commitments, personal time). 
+						Leave empty if you're available anytime. The scheduler will respect these times when generating timetables.
 					</p>
 
 					<div className="space-y-6">
@@ -252,7 +216,7 @@ export default function StudentSettingsPage() {
 								<div className="space-y-3">
 									{unavailability[day]?.map((window, index) => (
 										<div key={index} className="flex items-center gap-3 flex-wrap bg-error/5 p-2 rounded-lg border border-error/20">
-											<span className="text-error/70 text-sm">Cannot train:</span>
+											<span className="text-error/70 text-sm">Cannot teach:</span>
 											<Input
 												type="time"
 												label="From"
@@ -305,54 +269,6 @@ export default function StudentSettingsPage() {
 				</div>
 			</div>
 
-			{/* Partner Status Section */}
-			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
-				<div className="card-body">
-					<h2 className="card-title flex items-center gap-2 mb-4">
-						<Users className="h-5 w-5" />
-						Couple Status
-					</h2>
-					<p className="text-sm text-base-content/70 mb-6">
-						Your dance partner pairing status. Trainers will pair you with a partner to enable couple lessons.
-					</p>
-
-					{currentPairId && pairs.find((p) => p._id === currentPairId) ? (
-						<div className="alert alert-success">
-							<Users className="h-5 w-5" />
-							<div className="flex-1">
-								<p className="font-medium">You have a dance partner!</p>
-								<p className="text-sm mt-1">
-									Partner:{' '}
-									<span className="font-semibold">
-										{pairs
-											.find((p) => p._id === currentPairId)
-											?.[user._id === pairs.find((p) => p._id === currentPairId)?.studentAId._id
-												? 'studentBId'
-												: 'studentAId'].firstName}{' '}
-										{pairs
-											.find((p) => p._id === currentPairId)
-											?.[user._id === pairs.find((p) => p._id === currentPairId)?.studentAId._id
-												? 'studentBId'
-												: 'studentAId'].lastName}
-									</span>
-								</p>
-							</div>
-						</div>
-					) : (
-						<div className="alert alert-warning">
-							<Users className="h-5 w-5" />
-							<div className="flex-1">
-								<p className="font-medium">No partner assigned yet</p>
-								<p className="text-sm mt-1">
-									You don't have a partner yet. Please wait for a trainer to pair you with a dance partner.
-								</p>
-								{/* Future: Add button to notify trainer */}
-							</div>
-						</div>
-					)}
-				</div>
-			</div>
-
 			{/* Profile Information Section */}
 			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
 				<div className="card-body">
@@ -361,7 +277,7 @@ export default function StudentSettingsPage() {
 						Profile Information
 					</h2>
 					<p className="text-sm text-base-content/70 mb-6">
-						Update your personal information. Teachers may use this to contact you.
+						Your personal information.
 					</p>
 
 					<div className="space-y-4">

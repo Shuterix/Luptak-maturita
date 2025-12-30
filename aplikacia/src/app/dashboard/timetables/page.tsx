@@ -26,6 +26,14 @@ type TimetableType = 'weekly' | 'yearly' | 'after_school' | 'camp' | 'custom'
 type LessonType = 'group' | 'individual' | 'couple'
 type LessonKind = 'lesson' | 'break' | 'unused'
 
+type LessonStatus = 'scheduled' | 'cancelled' | 'completed' | 'no_show' | 'rescheduled'
+
+interface LessonCancellation {
+	byUserId?: string
+	reason?: string
+	at?: string
+}
+
 interface LessonForm {
 	id: string
 	kind: LessonKind
@@ -41,6 +49,8 @@ interface LessonForm {
 	manualOverride: boolean
 	notes?: string
 	breakType?: 'consecutive' | 'default'
+	status?: LessonStatus
+	cancellation?: LessonCancellation
 }
 
 export default TimetableManager
@@ -364,6 +374,8 @@ const convertFromApiLesson = (lesson: any): LessonForm => {
 		manualOverride: lesson.manualOverride ?? true,
 		notes: lesson.notes ?? '',
 		breakType: lesson.breakType,
+		status: lesson.status ?? 'scheduled',
+		cancellation: lesson.cancellation,
 	}
 }
 
@@ -429,11 +441,14 @@ const [autoLessonDuration, setAutoLessonDuration] = useState(DEFAULT_AUTO_CONFIG
 	const [autoDayStart, setAutoDayStart] = useState('15:00')
 	const [autoDayEnd, setAutoDayEnd] = useState('20:00')
 	const [autoIncludeWeekends, setAutoIncludeWeekends] = useState(true)
+	const [autoDistributeLessons, setAutoDistributeLessons] = useState(true)
 	const [autoError, setAutoError] = useState<string | null>(null)
 const [groupLessons, setGroupLessons] = useState<GroupLesson[]>([])
 	const groupLessonsRef = useRef<GroupLesson[]>([])
 	const [dbCouples, setDbCouples] = useState<any[]>([])
 	const [loadingCouples, setLoadingCouples] = useState(false)
+	const [dbTeachers, setDbTeachers] = useState<any[]>([])
+	const [loadingTeachers, setLoadingTeachers] = useState(false)
 const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 	const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
 	const [isSchedulerModalOpen, setIsSchedulerModalOpen] = useState(false)
@@ -441,6 +456,11 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 	const [showTimetableFullscreen, setShowTimetableFullscreen] = useState(false)
 	const [deleteConfirmTimetable, setDeleteConfirmTimetable] = useState<TimetableRecord | null>(null)
 	const [deletingTimetableId, setDeletingTimetableId] = useState<string | null>(null)
+	
+	// Overwrite confirmation states
+	const [overwriteConfirmTimetable, setOverwriteConfirmTimetable] = useState<TimetableRecord | null>(null)
+	const [showNewNameInput, setShowNewNameInput] = useState(false)
+	const [newTimetableName, setNewTimetableName] = useState('')
 
 	const canSubmit = useMemo(() => {
 		// Basic validation: user must be logged in and have club, and name must be provided
@@ -538,6 +558,7 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 						if (schedulerConfig.dayStart) setAutoDayStart(schedulerConfig.dayStart)
 						if (schedulerConfig.dayEnd) setAutoDayEnd(schedulerConfig.dayEnd)
 						if (schedulerConfig.includeWeekends !== undefined) setAutoIncludeWeekends(schedulerConfig.includeWeekends)
+						if (schedulerConfig.distributeLessons !== undefined) setAutoDistributeLessons(schedulerConfig.distributeLessons)
 						// Restore couple configs (desired lessons, priority, teacher assignments for database couples)
 						if (schedulerConfig.coupleConfigs && Array.isArray(schedulerConfig.coupleConfigs)) {
 							setSavedCoupleConfigs(schedulerConfig.coupleConfigs)
@@ -608,6 +629,7 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 		if (user?.clubId && !viewingTimetableId) {
 			fetchTimetables(user.clubId)
 			fetchDbCouples()
+			fetchDbTeachers()
 		}
 	}, [user?.clubId, viewingTimetableId])
 
@@ -632,10 +654,30 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 		}
 	}
 
+	const fetchDbTeachers = async () => {
+		if (!user?.clubId) return
+		setLoadingTeachers(true)
+		try {
+			const res = await fetch(`/api/users?clubId=${user.clubId}&role=trainer`, { cache: 'no-store' })
+			if (res.ok) {
+				const data = await res.json()
+				setDbTeachers(data.users || [])
+			}
+		} catch (err) {
+			console.error('Error fetching teachers:', err)
+		} finally {
+			setLoadingTeachers(false)
+		}
+	}
+
 	// Convert unavailability to availability for the algorithm
 	// The algorithm expects availability (times when CAN train), but we store unavailability (times when CANNOT train)
 	// For a day with hours dayStart-dayEnd, if unavailability is empty, availability is the full day
 	// If unavailability exists, we calculate the inverse (available times = day hours minus unavailability)
+	// 
+	// IMPORTANT: Since different days may have different unavailability, we calculate the BEST case availability
+	// (i.e., availability windows that exist on at least one day). The actual scheduling will respect
+	// day-specific unavailability when checking if a student is available on a specific date.
 	const convertUnavailabilityToAvailability = (
 		unavailability: any,
 		dayStart: string,
@@ -649,54 +691,92 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 		const dayStartMinutes = toMinutes(dayStart)
 		const dayEndMinutes = toMinutes(dayEnd)
 		
-		// Collect all unavailability windows across all days
+		// Helper to get windows from either format (direct day props or nested days Map)
+		const getWindowsForDay = (day: string): Array<{ start: string; end: string }> => {
+			// Try direct day property first (new format)
+			if (unavailability[day] && Array.isArray(unavailability[day])) {
+				return unavailability[day]
+			}
+			// Try nested days Map format (old format from Pair model)
+			if (unavailability.days) {
+				// Handle Map-like object
+				if (unavailability.days.get && typeof unavailability.days.get === 'function') {
+					return unavailability.days.get(day) || []
+				}
+				// Handle plain object
+				if (unavailability.days[day] && Array.isArray(unavailability.days[day])) {
+					return unavailability.days[day]
+				}
+			}
+			return []
+		}
+		
+		// Calculate availability for EACH day separately, then find the union of all available times
+		// This way, if someone is available 15:00-20:00 on Monday but only 18:00-20:00 on Tuesday,
+		// we return 15:00-20:00 (the best case) and let the day-specific logic handle restrictions
 		const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
-		const unavailableWindows: Array<{ start: number; end: number }> = []
+		const allAvailableWindows: Array<{ start: number; end: number }> = []
 		
 		for (const day of days) {
-			const windows = unavailability[day] || []
-			for (const window of windows) {
+			const dayUnavailWindows = getWindowsForDay(day)
+			
+			// Convert to minute ranges and clip to day schedule
+			const unavailRanges: Array<{ start: number; end: number }> = []
+			for (const window of dayUnavailWindows) {
 				if (window.start && window.end) {
 					const startMinutes = toMinutes(window.start)
 					const endMinutes = toMinutes(window.end)
 					// Only include windows that overlap with the day schedule
 					if (startMinutes < dayEndMinutes && endMinutes > dayStartMinutes) {
-						unavailableWindows.push({
+						unavailRanges.push({
 							start: Math.max(startMinutes, dayStartMinutes),
 							end: Math.min(endMinutes, dayEndMinutes),
 						})
 					}
 				}
 			}
-		}
-		
-		// If no unavailability windows, available for the entire day
-		if (unavailableWindows.length === 0) {
-			return [`${dayStart}-${dayEnd}`]
-		}
-		
-		// Sort unavailability windows by start time
-		unavailableWindows.sort((a, b) => a.start - b.start)
-		
-		// Calculate available windows (inverse of unavailability)
-		const availableWindows: string[] = []
-		let currentStart = dayStartMinutes
-		
-		for (const unavail of unavailableWindows) {
-			// If there's a gap before this unavailability window, it's available time
-			if (currentStart < unavail.start) {
-				availableWindows.push(`${toTimeString(currentStart)}-${toTimeString(unavail.start)}`)
+			
+			// Calculate available windows for this day (invert unavailability)
+			unavailRanges.sort((a, b) => a.start - b.start)
+			let currentStart = dayStartMinutes
+			
+			for (const unavail of unavailRanges) {
+				if (currentStart < unavail.start) {
+					allAvailableWindows.push({ start: currentStart, end: unavail.start })
+				}
+				currentStart = Math.max(currentStart, unavail.end)
 			}
-			// Move current start to after this unavailability window
-			currentStart = Math.max(currentStart, unavail.end)
+			
+			if (currentStart < dayEndMinutes) {
+				allAvailableWindows.push({ start: currentStart, end: dayEndMinutes })
+			}
 		}
 		
-		// If there's time left after the last unavailability window
-		if (currentStart < dayEndMinutes) {
-			availableWindows.push(`${toTimeString(currentStart)}-${toTimeString(dayEndMinutes)}`)
+		// If no available windows on any day, return empty (will cause validation error)
+		if (allAvailableWindows.length === 0) {
+			return []
 		}
 		
-		return availableWindows.length > 0 ? availableWindows : []
+		// Merge overlapping available windows to get unique availability ranges
+		allAvailableWindows.sort((a, b) => a.start - b.start)
+		const mergedWindows: Array<{ start: number; end: number }> = []
+		
+		for (const window of allAvailableWindows) {
+			if (mergedWindows.length === 0) {
+				mergedWindows.push({ ...window })
+			} else {
+				const last = mergedWindows[mergedWindows.length - 1]
+				if (window.start <= last.end) {
+					// Overlapping or adjacent, merge
+					last.end = Math.max(last.end, window.end)
+				} else {
+					mergedWindows.push({ ...window })
+				}
+			}
+		}
+		
+		// Convert back to time strings
+		return mergedWindows.map(w => `${toTimeString(w.start)}-${toTimeString(w.end)}`)
 	}
 
 const handleAddAutoTeacher = () => {
@@ -765,72 +845,48 @@ const handleGenerateAutomaticSchedule = () => {
 		}
 	}
 
-		// Use form data for teachers
-		// Convert unavailability to availability for the algorithm
-		const teacherPayload: Teacher[] = autoTeachers
-			.filter((teacher) => teacher.name.trim())
-			.map((teacher, index) => {
-				// Teacher.availability field contains unavailability (times when CANNOT train)
-				// Convert to availability (times when CAN train) for the algorithm
-				const unavailabilityStr = (teacher.availability || '').trim()
-				const unavailabilityWindows = unavailabilityStr ? splitCommaSeparated(unavailabilityStr) : []
-				
-				// Convert unavailability to availability
-				// If no unavailability, available for entire day
-				// Otherwise, calculate inverse
-				let availability: string[] = []
-				if (unavailabilityWindows.length === 0) {
-					// Available anytime = available for entire day schedule
-					availability = [`${autoDayStart}-${autoDayEnd}`]
-				} else {
-					// Calculate available times by inverting unavailability
-					const dayStartMinutes = toMinutes(autoDayStart)
-					const dayEndMinutes = toMinutes(autoDayEnd)
-					const unavailableRanges: Array<{ start: number; end: number }> = []
-					
-					for (const window of unavailabilityWindows) {
-						const [startStr, endStr] = window.split('-')
-						if (startStr && endStr) {
-							const startMinutes = toMinutes(startStr)
-							const endMinutes = toMinutes(endStr)
-							if (startMinutes < dayEndMinutes && endMinutes > dayStartMinutes) {
-								unavailableRanges.push({
-									start: Math.max(startMinutes, dayStartMinutes),
-									end: Math.min(endMinutes, dayEndMinutes),
-								})
-							}
-						}
+		// Use database teachers - convert their unavailability to availability for the algorithm
+		if (dbTeachers.length === 0) {
+			setAutoError('No teachers found in database. Please ensure trainers are registered in the club.')
+			return
+		}
+
+		// Get teacher configs from localStorage if available
+		const storedTeacherConfigsStr = typeof window !== 'undefined' ? window.localStorage.getItem('teacherConfigs') : null
+		const teacherConfigsMap: Record<string, { maxLessonsPerDay: number; room: string }> = {}
+		if (storedTeacherConfigsStr) {
+			try {
+				const configs = JSON.parse(storedTeacherConfigsStr)
+				configs.forEach((config: any) => {
+					teacherConfigsMap[config.teacherId] = {
+						maxLessonsPerDay: config.maxLessonsPerDay ?? 4,
+						room: config.room || '',
 					}
-					
-					// Sort and calculate available windows
-					unavailableRanges.sort((a, b) => a.start - b.start)
-					let currentStart = dayStartMinutes
-					
-					for (const unavail of unavailableRanges) {
-						if (currentStart < unavail.start) {
-							availability.push(`${toTimeString(currentStart)}-${toTimeString(unavail.start)}`)
-						}
-						currentStart = Math.max(currentStart, unavail.end)
-					}
-					
-					if (currentStart < dayEndMinutes) {
-						availability.push(`${toTimeString(currentStart)}-${toTimeString(dayEndMinutes)}`)
-					}
-					
-					// If no available windows, set to empty (shouldn't happen, but handle it)
-					if (availability.length === 0) {
-						availability = [`${autoDayStart}-${autoDayEnd}`]
-					}
-				}
-				
-				return {
-					name: teacher.name.trim(),
-					availability,
-					maxLessonsPerDay: Math.max(1, Number(teacher.maxLessonsPerDay) || 1),
-					room: teacher.room.trim() || `Room ${index + 1}`,
-					unavailableDates: splitCommaSeparated(teacher.unavailableDates),
-				}
-			})
+				})
+			} catch (e) {
+				console.warn('Failed to parse teacher configs from localStorage')
+			}
+		}
+
+		const teacherPayload: Teacher[] = dbTeachers.map((teacher, index) => {
+			const teacherName = `${teacher.firstName} ${teacher.lastName}`
+			const config = teacherConfigsMap[teacher._id] || { maxLessonsPerDay: 4, room: '' }
+			
+			// Convert teacher unavailability to availability for the algorithm
+			const availability = convertUnavailabilityToAvailability(
+				teacher.unavailability,
+				autoDayStart,
+				autoDayEnd
+			)
+			
+			return {
+				name: teacherName,
+				availability,
+				maxLessonsPerDay: Math.max(1, config.maxLessonsPerDay || 4),
+				room: config.room || `Room ${index + 1}`,
+				unavailableDates: [], // TODO: Add support for teacher unavailable dates
+			}
+		})
 
 		// Use only database couples - no fallback to manual input
 		if (dbCouples.length === 0) {
@@ -957,6 +1013,7 @@ const handleGenerateAutomaticSchedule = () => {
 			lessonDuration: Math.max(5, Number(autoLessonDuration) || DEFAULT_AUTO_CONFIG.lessonDuration),
 			studentBreakAfter: Math.max(1, Number(autoStudentBreakAfter) || DEFAULT_AUTO_CONFIG.studentBreakAfter),
 			teacherBreakAfter: Math.max(1, Number(autoTeacherBreakAfter) || DEFAULT_AUTO_CONFIG.teacherBreakAfter),
+			distributeLessons: autoDistributeLessons,
 		}
 
 		// Use ref to get the latest group lessons (state might be stale due to async updates)
@@ -1555,19 +1612,76 @@ const handleGenerateAutomaticSchedule = () => {
 			})
 	}, [lessons])
 
+	// Helper to convert unavailability to display string
+	const convertUnavailabilityToString = (unavailability: any): string => {
+		if (!unavailability) return 'Available anytime'
+		
+		const getWindowsForDay = (day: string): Array<{ start: string; end: string }> => {
+			if (unavailability[day] && Array.isArray(unavailability[day])) {
+				return unavailability[day]
+			}
+			if (unavailability.days) {
+				if (unavailability.days.get && typeof unavailability.days.get === 'function') {
+					return unavailability.days.get(day) || []
+				}
+				if (unavailability.days[day] && Array.isArray(unavailability.days[day])) {
+					return unavailability.days[day]
+				}
+			}
+			return []
+		}
+		
+		const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
+		const result: string[] = []
+		
+		for (const day of days) {
+			const windows = getWindowsForDay(day)
+			for (const window of windows) {
+				if (window.start && window.end) {
+					result.push(`${window.start}-${window.end}`)
+				}
+			}
+		}
+		
+		return result.length > 0 ? result.join(', ') : 'Available anytime'
+	}
+
 	const editorTeachers = useMemo<Teacher[]>(() => {
-		return autoTeachers
-			.filter((teacher) => teacher.name.trim())
-			.map((teacher, index) => ({
-				name: teacher.name.trim(),
-				// Teacher availability field now represents unavailability (times when CANNOT train)
-				// Empty string means available anytime
-				availability: teacher.availability.trim() ? splitCommaSeparated(teacher.availability) : [],
-				maxLessonsPerDay: Math.max(1, Number(teacher.maxLessonsPerDay) || 1),
-				room: teacher.room.trim() || `Room ${index + 1}`,
-				unavailableDates: splitCommaSeparated(teacher.unavailableDates),
-			}))
-	}, [autoTeachers])
+		// Use database teachers instead of autoTeachers
+		if (dbTeachers.length === 0) return []
+		
+		// Get teacher configs from localStorage if available
+		const storedTeacherConfigsStr = typeof window !== 'undefined' ? window.localStorage.getItem('teacherConfigs') : null
+		const teacherConfigsMap: Record<string, { maxLessonsPerDay: number; room: string }> = {}
+		if (storedTeacherConfigsStr) {
+			try {
+				const configs = JSON.parse(storedTeacherConfigsStr)
+				configs.forEach((config: any) => {
+					teacherConfigsMap[config.teacherId] = {
+						maxLessonsPerDay: config.maxLessonsPerDay ?? 4,
+						room: config.room || '',
+					}
+				})
+			} catch (err) {
+				console.error('Error parsing teacher configs:', err)
+			}
+		}
+		
+		return dbTeachers.map((teacher, index) => {
+			const teacherName = `${teacher.firstName} ${teacher.lastName}`
+			const config = teacherConfigsMap[teacher._id] || { maxLessonsPerDay: 4, room: '' }
+			const unavailabilityStr = convertUnavailabilityToString(teacher.unavailability)
+			
+			return {
+				name: teacherName,
+				// For display: show unavailability as a string (times when CANNOT train)
+				// Empty array means available anytime
+				availability: unavailabilityStr === 'Available anytime' ? [] : [unavailabilityStr],
+				maxLessonsPerDay: Math.max(1, config.maxLessonsPerDay || 4),
+				room: config.room || `Room ${index + 1}`,
+			}
+		})
+	}, [dbTeachers])
 
 	// Editor couples for the group lesson modal (simpler interface)
 	const editorCouples = useMemo(() => {
@@ -1723,6 +1837,27 @@ const handleGenerateAutomaticSchedule = () => {
 			return
 		}
 
+		// Check if a timetable with the same name already exists
+		const existingTimetable = timetables.find(
+			(t) => t.name.toLowerCase() === form.name.toLowerCase()
+		)
+
+		if (existingTimetable) {
+			// Show overwrite confirmation dialog
+			setOverwriteConfirmTimetable(existingTimetable)
+			return
+		}
+
+		// No duplicate, proceed with saving as new
+		await saveTimetableAsNew(form.name)
+	}
+
+	const saveTimetableAsNew = async (name: string) => {
+		if (!user?.clubId || !user?._id) {
+			setError('Missing club or user information. Ensure you are logged in and assigned to a club.')
+			return
+		}
+
 		try {
 			setSaving(true)
 			setError(null)
@@ -1732,7 +1867,7 @@ const handleGenerateAutomaticSchedule = () => {
 			const payload = {
 				clubId: user.clubId,
 				createdBy: user._id,
-				name: form.name,
+				name: name,
 				type: form.type,
 				startDate: form.type === 'weekly' ? (form.startDate || '') : form.startDate,
 				endDate: form.type === 'weekly' ? (form.endDate || '') : form.endDate,
@@ -1756,6 +1891,7 @@ const handleGenerateAutomaticSchedule = () => {
 							dayStart: autoDayStart,
 							dayEnd: autoDayEnd,
 							includeWeekends: autoIncludeWeekends,
+							distributeLessons: autoDistributeLessons,
 							coupleConfigs: savedCoupleConfigs, // This includes desiredLessons, priority, teacherLessons (as Record) for database couples
 						},
 						// Save group lessons configuration
@@ -1782,12 +1918,113 @@ const handleGenerateAutomaticSchedule = () => {
 			setTimetables((prev) => [saved, ...prev])
 			setSelectedTimetableId(saved._id)
 			showAlertToast('Timetable saved', { variant: 'success', title: 'Saved' })
+			
+			// Update form name if we saved with a new name
+			if (name !== form.name) {
+				setForm((prev) => ({ ...prev, name }))
+			}
 		} catch (err: any) {
 			console.error(err)
 			setError(err.message ?? 'Unable to save timetable')
 		} finally {
 			setSaving(false)
 		}
+	}
+
+	const handleOverwriteTimetable = async (timetableId: string) => {
+		if (!user?.clubId || !user?._id) {
+			setError('Missing club or user information. Ensure you are logged in and assigned to a club.')
+			return
+		}
+
+		try {
+			setSaving(true)
+			setError(null)
+
+			const payload = {
+				clubId: user.clubId,
+				createdBy: user._id,
+				name: form.name,
+				type: form.type,
+				startDate: form.type === 'weekly' ? (form.startDate || '') : form.startDate,
+				endDate: form.type === 'weekly' ? (form.endDate || '') : form.endDate,
+				dayStart: form.dayStart,
+				dayEnd: form.dayEnd,
+				defaultLessonDuration: form.defaultLessonDuration,
+				slotMinutes: form.slotMinutes,
+				lessons: lessons.map((lesson) => convertToApiLesson(lesson, form.slotMinutes)),
+				settings: {
+					ruleEnforcedDuringGeneration: false,
+					metadata: {
+						savedFrom: 'dashboard/timetables',
+						schedulerConfig: {
+							teachers: autoTeachers,
+							couples: autoCouples,
+							breaks: autoBreaksInput,
+							lessonDuration: autoLessonDuration,
+							studentBreakAfter: autoStudentBreakAfter,
+							teacherBreakAfter: autoTeacherBreakAfter,
+							dayStart: autoDayStart,
+							dayEnd: autoDayEnd,
+							includeWeekends: autoIncludeWeekends,
+							distributeLessons: autoDistributeLessons,
+							coupleConfigs: savedCoupleConfigs,
+						},
+						groupLessons: groupLessons,
+					},
+				},
+			}
+
+			const res = await fetch(`/api/timetables/${timetableId}`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(payload),
+			})
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}))
+				throw new Error(data.message ?? 'Failed to update timetable')
+			}
+
+			const data = await res.json()
+			const updated = data.timetable as TimetableRecord
+			
+			// Replace the old timetable with the updated one
+			setTimetables((prev) => prev.map((t) => (t._id === timetableId ? updated : t)))
+			setSelectedTimetableId(updated._id)
+			setOverwriteConfirmTimetable(null)
+			showAlertToast('Timetable updated', { variant: 'success', title: 'Updated' })
+		} catch (err: any) {
+			console.error(err)
+			setError(err.message ?? 'Unable to update timetable')
+		} finally {
+			setSaving(false)
+		}
+	}
+
+	const handleSaveWithNewName = async () => {
+		const trimmedName = newTimetableName.trim()
+		if (!trimmedName) {
+			setError('Please enter a valid name')
+			return
+		}
+
+		// Check if this new name also exists
+		const existsWithNewName = timetables.find(
+			(t) => t.name.toLowerCase() === trimmedName.toLowerCase()
+		)
+
+		if (existsWithNewName) {
+			setError(`A timetable with the name "${trimmedName}" already exists. Please choose a different name.`)
+			return
+		}
+
+		setOverwriteConfirmTimetable(null)
+		setShowNewNameInput(false)
+		setNewTimetableName('')
+		await saveTimetableAsNew(trimmedName)
 	}
 
 
@@ -1831,6 +2068,7 @@ const handleGenerateAutomaticSchedule = () => {
 							dayStart: autoDayStart,
 							dayEnd: autoDayEnd,
 							includeWeekends: autoIncludeWeekends,
+							distributeLessons: autoDistributeLessons,
 							coupleConfigs: savedCoupleConfigs, // This includes desiredLessons, priority, teacherLessons (as Record) for database couples
 						},
 						// Save group lessons configuration
@@ -2076,6 +2314,102 @@ return (
 						</div>
 					</div>
 				)}
+
+				{/* Overwrite Confirmation Modal */}
+				{overwriteConfirmTimetable && (
+					<div className="fixed inset-0 z-50 flex items-center justify-center bg-base-content/60 p-4">
+						<div className="w-full max-w-md rounded-2xl bg-base-200 shadow-2xl border border-base-300">
+							<div className="p-6 space-y-4">
+								<h3 className="text-lg font-semibold text-base-content">Timetable Already Exists</h3>
+								
+								{!showNewNameInput ? (
+									<>
+										<p className="text-sm text-base-content/70">
+											A timetable named <span className="font-medium">"{overwriteConfirmTimetable.name}"</span> already exists. 
+											Would you like to overwrite it or save with a different name?
+										</p>
+										<div className="flex flex-col gap-2 pt-4">
+											<Button
+												className="btn-primary w-full"
+												onClick={() => handleOverwriteTimetable(overwriteConfirmTimetable._id)}
+												disabled={saving}
+											>
+												{saving ? (
+													<span className="loading loading-spinner loading-sm"></span>
+												) : (
+													'Overwrite Existing'
+												)}
+											</Button>
+											<Button
+												className="btn-outline w-full"
+												onClick={() => {
+													setShowNewNameInput(true)
+													setNewTimetableName(form.name + ' (copy)')
+												}}
+												disabled={saving}
+											>
+												Save with Different Name
+											</Button>
+											<Button
+												className="btn-ghost w-full"
+												onClick={() => {
+													setOverwriteConfirmTimetable(null)
+													setShowNewNameInput(false)
+													setNewTimetableName('')
+												}}
+												disabled={saving}
+											>
+												Cancel
+											</Button>
+										</div>
+									</>
+								) : (
+									<>
+										<p className="text-sm text-base-content/70">
+											Enter a new name for the timetable:
+										</p>
+										<input
+											type="text"
+											className="input input-bordered w-full"
+											value={newTimetableName}
+											onChange={(e) => setNewTimetableName(e.target.value)}
+											placeholder="New timetable name"
+											autoFocus
+											onKeyDown={(e) => {
+												if (e.key === 'Enter') {
+													handleSaveWithNewName()
+												}
+											}}
+										/>
+										<div className="flex items-center gap-3 pt-2">
+											<Button
+												className="btn-ghost flex-1"
+												onClick={() => {
+													setShowNewNameInput(false)
+													setNewTimetableName('')
+												}}
+												disabled={saving}
+											>
+												Back
+											</Button>
+											<Button
+												className="btn-primary flex-1"
+												onClick={handleSaveWithNewName}
+												disabled={saving || !newTimetableName.trim()}
+											>
+												{saving ? (
+													<span className="loading loading-spinner loading-sm"></span>
+												) : (
+													'Save'
+												)}
+											</Button>
+										</div>
+									</>
+								)}
+							</div>
+						</div>
+					</div>
+				)}
 			</div>
 		)
 	}
@@ -2231,6 +2565,7 @@ return (
 														<div className="flex flex-1 flex-wrap gap-3">
 															{row.lessons.map((lesson) => {
 																const isLesson = lesson.kind === 'lesson'
+																const isCancelled = lesson.status === 'cancelled'
 																const badgeLabel = isLesson ? (lesson.lessonType ?? 'lesson') : lesson.kind
 																
 																// Extract group name from notes if it's a group lesson
@@ -2257,7 +2592,10 @@ return (
 																	: lesson.notes || lesson.roomLabel || 'Break period'
 																	// Different colors for different lesson types
 																	let backgroundClass = 'bg-neutral/20 border-neutral/40 text-base-content'
-																	if (isLesson) {
+																	if (isCancelled) {
+																		// Cancelled lesson styling - greyed out with strikethrough effect
+																		backgroundClass = 'bg-error/10 border-error/30 text-base-content/50 opacity-60'
+																	} else if (isLesson) {
 																		if (lesson.lessonType === 'group') {
 																			backgroundClass = 'bg-gradient-to-br from-purple-500/40 via-purple-600/35 to-purple-700/40 border-purple-500/60 text-white shadow-md shadow-purple-500/20'
 																		} else if (lesson.lessonType === 'couple') {
@@ -2273,7 +2611,14 @@ return (
 																	let subTextClass = 'text-xs text-base-content/60'
 																	let hoverClass = 'hover:border-primary hover:bg-primary/40 hover:text-primary-content'
 																	
-																	if (isLesson) {
+																	if (isCancelled) {
+																		// Cancelled styling
+																		pillTextClass = 'text-[11px] uppercase tracking-wide text-error/70'
+																		timeTextClass = 'text-xs font-mono text-base-content/50 line-through'
+																		headerTextClass = 'text-sm font-semibold text-base-content/50 line-through'
+																		subTextClass = 'text-xs text-base-content/40'
+																		hoverClass = 'hover:border-error/50'
+																	} else if (isLesson) {
 																		if (lesson.lessonType === 'group') {
 																			pillTextClass = 'text-[11px] uppercase tracking-wide text-white/90 font-semibold'
 																			timeTextClass = 'text-xs font-mono text-white/90'
@@ -2306,10 +2651,14 @@ return (
 																			style={{ minHeight }}
 																			className={`min-w-[200px] cursor-pointer rounded-xl border px-3 py-2 text-left transition ${backgroundClass} ${hoverClass}`}
 																			onClick={() => handleLessonCardClick(lesson)}
+																			title={isCancelled && lesson.cancellation?.reason ? `Cancelled: ${lesson.cancellation.reason}` : undefined}
 																		>
 																			<div className={`mb-1 flex items-center justify-between ${pillTextClass}`}>
 																				<span>{badgeLabel}</span>
-																				{lesson.locked && <span className="badge badge-ghost badge-xs">Locked</span>}
+																				<div className="flex items-center gap-1">
+																					{isCancelled && <span className="badge badge-error badge-xs">Cancelled</span>}
+																					{lesson.locked && <span className="badge badge-ghost badge-xs">Locked</span>}
+																				</div>
 																			</div>
 																			<div className={timeTextClass}>
 																				{lesson.startTime} – {lesson.endTime}
@@ -2318,6 +2667,11 @@ return (
 																				{displayName}
 																			</div>
 																			<div className={subTextClass}>{detailsLine}</div>
+																			{isCancelled && lesson.cancellation?.reason && (
+																				<div className="mt-1 text-[10px] text-error/70 bg-error/10 rounded px-1.5 py-0.5 truncate">
+																					Reason: {lesson.cancellation.reason}
+																				</div>
+																			)}
 																		</button>
 																		<button
 																			type="button"
@@ -2379,6 +2733,7 @@ return (
 															<div className="flex flex-1 flex-wrap gap-3">
 																{row.lessons.map((lesson) => {
 																	const isLesson = lesson.kind === 'lesson'
+																	const isCancelled = lesson.status === 'cancelled'
 																	const badgeLabel = isLesson ? (lesson.lessonType ?? 'lesson') : lesson.kind
 																	
 																	// Extract group name from notes if it's a group lesson
@@ -2405,7 +2760,9 @@ return (
 																		: lesson.notes || lesson.roomLabel || 'Break period'
 																	// Different colors for different lesson types
 																	let backgroundClass = 'bg-neutral/20 border-neutral/40 text-base-content'
-																	if (isLesson) {
+																	if (isCancelled) {
+																		backgroundClass = 'bg-error/10 border-error/30 text-base-content/50 opacity-60'
+																	} else if (isLesson) {
 																		if (lesson.lessonType === 'group') {
 																			backgroundClass = 'bg-gradient-to-br from-purple-500/40 via-purple-600/35 to-purple-700/40 border-purple-500/60 text-white shadow-md shadow-purple-500/20'
 																		} else if (lesson.lessonType === 'couple') {
@@ -2421,7 +2778,13 @@ return (
 																	let subTextClass = 'text-xs text-base-content/60'
 																	let hoverClass = 'hover:border-primary hover:bg-primary/40 hover:text-primary-content'
 																	
-																	if (isLesson) {
+																	if (isCancelled) {
+																		pillTextClass = 'text-[11px] uppercase tracking-wide text-error/70'
+																		timeTextClass = 'text-xs font-mono text-base-content/50 line-through'
+																		headerTextClass = 'text-sm font-semibold text-base-content/50 line-through'
+																		subTextClass = 'text-xs text-base-content/40'
+																		hoverClass = 'hover:border-error/50'
+																	} else if (isLesson) {
 																		if (lesson.lessonType === 'group') {
 																			pillTextClass = 'text-[11px] uppercase tracking-wide text-white/90 font-semibold'
 																			timeTextClass = 'text-xs font-mono text-white/90'
@@ -2454,10 +2817,14 @@ return (
 																				style={{ minHeight }}
 																				className={`min-w-[200px] cursor-pointer rounded-xl border px-3 py-2 text-left transition ${backgroundClass} ${hoverClass}`}
 																				onClick={() => handleLessonCardClick(lesson)}
+																				title={isCancelled && lesson.cancellation?.reason ? `Cancelled: ${lesson.cancellation.reason}` : undefined}
 																			>
 																				<div className={`mb-1 flex items-center justify-between ${pillTextClass}`}>
 																					<span>{badgeLabel}</span>
-																					{lesson.locked && <span className="badge badge-ghost badge-xs">Locked</span>}
+																					<div className="flex items-center gap-1">
+																						{isCancelled && <span className="badge badge-error badge-xs">Cancelled</span>}
+																						{lesson.locked && <span className="badge badge-ghost badge-xs">Locked</span>}
+																					</div>
 																				</div>
 																				<div className={timeTextClass}>
 																					{lesson.startTime} – {lesson.endTime}
@@ -2466,6 +2833,11 @@ return (
 																					{displayName}
 																				</div>
 																				<div className={subTextClass}>{detailsLine}</div>
+																				{isCancelled && lesson.cancellation?.reason && (
+																					<div className="mt-1 text-[10px] text-error/70 bg-error/10 rounded px-1.5 py-0.5 truncate">
+																						Reason: {lesson.cancellation.reason}
+																					</div>
+																				)}
 																			</button>
 																			<button
 																				type="button"
@@ -2682,6 +3054,7 @@ return (
 			teachers={autoTeachers}
 			couples={autoCouples}
 			dbCouples={dbCouples}
+			dbTeachers={dbTeachers}
 			breaks={autoBreaksInput}
 			lessonDuration={autoLessonDuration}
 			studentBreakAfter={autoStudentBreakAfter}
@@ -2689,6 +3062,7 @@ return (
 			dayStart={autoDayStart}
 			dayEnd={autoDayEnd}
 			includeWeekends={autoIncludeWeekends}
+			distributeLessons={autoDistributeLessons}
 			onSave={(config) => {
 				setAutoTeachers(config.teachers)
 				setAutoCouples(config.couples)
@@ -2699,6 +3073,7 @@ return (
 				setAutoDayStart(config.dayStart)
 				setAutoDayEnd(config.dayEnd)
 				setAutoIncludeWeekends(config.includeWeekends)
+				setAutoDistributeLessons(config.distributeLessons)
 				// Store couple configs in state and localStorage for use in generation
 				if (config.coupleConfigs && Array.isArray(config.coupleConfigs)) {
 					setSavedCoupleConfigs(config.coupleConfigs)
@@ -2766,6 +3141,102 @@ return (
 			existingLessons={lessons}
 			slotMinutes={form.slotMinutes}
 		/>
+
+		{/* Overwrite Confirmation Modal */}
+		{overwriteConfirmTimetable && (
+			<div className="fixed inset-0 z-50 flex items-center justify-center bg-base-content/60 p-4">
+				<div className="w-full max-w-md rounded-2xl bg-base-200 shadow-2xl border border-base-300">
+					<div className="p-6 space-y-4">
+						<h3 className="text-lg font-semibold text-base-content">Timetable Already Exists</h3>
+						
+						{!showNewNameInput ? (
+							<>
+								<p className="text-sm text-base-content/70">
+									A timetable named <span className="font-medium">"{overwriteConfirmTimetable.name}"</span> already exists. 
+									Would you like to overwrite it or save with a different name?
+								</p>
+								<div className="flex flex-col gap-2 pt-4">
+									<Button
+										className="btn-primary w-full"
+										onClick={() => handleOverwriteTimetable(overwriteConfirmTimetable._id)}
+										disabled={saving}
+									>
+										{saving ? (
+											<span className="loading loading-spinner loading-sm"></span>
+										) : (
+											'Overwrite Existing'
+										)}
+									</Button>
+									<Button
+										className="btn-outline w-full"
+										onClick={() => {
+											setShowNewNameInput(true)
+											setNewTimetableName(form.name + ' (copy)')
+										}}
+										disabled={saving}
+									>
+										Save with Different Name
+									</Button>
+									<Button
+										className="btn-ghost w-full"
+										onClick={() => {
+											setOverwriteConfirmTimetable(null)
+											setShowNewNameInput(false)
+											setNewTimetableName('')
+										}}
+										disabled={saving}
+									>
+										Cancel
+									</Button>
+								</div>
+							</>
+						) : (
+							<>
+								<p className="text-sm text-base-content/70">
+									Enter a new name for the timetable:
+								</p>
+								<input
+									type="text"
+									className="input input-bordered w-full"
+									value={newTimetableName}
+									onChange={(e) => setNewTimetableName(e.target.value)}
+									placeholder="New timetable name"
+									autoFocus
+									onKeyDown={(e) => {
+										if (e.key === 'Enter') {
+											handleSaveWithNewName()
+										}
+									}}
+								/>
+								<div className="flex items-center gap-3 pt-2">
+									<Button
+										className="btn-ghost flex-1"
+										onClick={() => {
+											setShowNewNameInput(false)
+											setNewTimetableName('')
+										}}
+										disabled={saving}
+									>
+										Back
+									</Button>
+									<Button
+										className="btn-primary flex-1"
+										onClick={handleSaveWithNewName}
+										disabled={saving || !newTimetableName.trim()}
+									>
+										{saving ? (
+											<span className="loading loading-spinner loading-sm"></span>
+										) : (
+											'Save'
+										)}
+									</Button>
+								</div>
+							</>
+						)}
+					</div>
+				</div>
+			</div>
+		)}
 	</div>
 )
 }
