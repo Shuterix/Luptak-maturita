@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { Users, GraduationCap, UserCheck, Mail, Phone } from 'lucide-react'
+import { Users, GraduationCap, UserCheck, Mail, Phone, Heart } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 interface UserData {
@@ -16,10 +16,18 @@ interface UserData {
 	}
 }
 
+interface ClubData {
+	_id: string
+	name: string
+	description?: string
+	coupleCount: number
+}
+
 export default function ClubOverviewPage() {
 	const { user } = useAuth()
 	const [students, setStudents] = useState<UserData[]>([])
 	const [trainers, setTrainers] = useState<UserData[]>([])
+	const [club, setClub] = useState<ClubData | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
 	const isMobile = useMediaQuery('(max-width: 768px)')
@@ -38,6 +46,15 @@ export default function ClubOverviewPage() {
 			if (!user?.clubId) {
 				setError('You are not assigned to a club.')
 				return
+			}
+
+			// Fetch club info
+			const clubRes = await fetch(`/api/clubs/${user.clubId}`, { cache: 'no-store' })
+			if (clubRes.ok) {
+				const clubData = await clubRes.json()
+				setClub(clubData.club)
+			} else {
+				throw new Error('Failed to fetch club information')
 			}
 
 			// Fetch students
@@ -128,13 +145,21 @@ export default function ClubOverviewPage() {
 					<Users className="h-8 w-8 text-primary" />
 					<h1 className="text-2xl sm:text-3xl font-semibold">Club Overview</h1>
 				</div>
+				{club && (
+					<div className="mb-4">
+						<h2 className="text-xl sm:text-2xl font-bold mb-2">{club.name}</h2>
+						{club.description && (
+							<p className="text-sm sm:text-base text-base-content/70 mb-2">{club.description}</p>
+						)}
+					</div>
+				)}
 				<p className="text-sm sm:text-base text-base-content/60">
 					View all students and trainers in your club
 				</p>
 			</header>
 
 			{/* Stats Cards */}
-			<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+			<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 				<div className="card bg-base-100 shadow-md border border-base-300">
 					<div className="card-body p-4 sm:p-6">
 						<div className="flex items-center gap-3">
@@ -157,6 +182,19 @@ export default function ClubOverviewPage() {
 							<div>
 								<p className="text-sm text-base-content/60">Trainers</p>
 								<p className="text-2xl font-bold">{trainers.length}</p>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div className="card bg-base-100 shadow-md border border-base-300">
+					<div className="card-body p-4 sm:p-6">
+						<div className="flex items-center gap-3">
+							<div className="p-3 bg-accent/20 rounded-lg">
+								<Heart className="h-6 w-6 text-accent" />
+							</div>
+							<div>
+								<p className="text-sm text-base-content/60">Couples</p>
+								<p className="text-2xl font-bold">{club?.coupleCount || 0}</p>
 							</div>
 						</div>
 					</div>

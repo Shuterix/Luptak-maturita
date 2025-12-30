@@ -276,6 +276,7 @@ const isTimeUnavailableOnDay = (unavailability: any, date: string, startTime: Da
 			const unavailEnd = toMinutes(window.end)
 			
 			// Check if slot overlaps with unavailable window
+			// Unavailability end time is exclusive - slot can start exactly at the end time
 			if (slotStartMinutes < unavailEnd && slotEndMinutes > unavailStart) {
 				return true // Slot is unavailable
 			}
@@ -1049,7 +1050,7 @@ export function generateTimetable(
 							}
 							return false
 						})
-					)
+					})
 
 					if (allParticipantsAvailable) {
 						// Use custom duration if set, otherwise use slot duration
@@ -1826,6 +1827,26 @@ const studentState: Record<string, {
 						lessonsForToday = Math.min(remainingTotalLessons, behindBy)
 					}
 				}
+				
+				// If we've completed a full distribution cycle but still need more lessons, continue scheduling
+				// This handles cases where desiredLessons > number of available days
+				if (lessonsForToday === 0 && remainingTotalLessons > 0 && scheduledDays.length > 0) {
+					// Check if we've completed at least one full cycle
+					const cyclesCompleted = Math.floor(lessonsScheduledSoFar / scheduledDays.length)
+					const lessonsInCurrentCycle = lessonsScheduledSoFar % scheduledDays.length
+					
+					// If we're in a new cycle, allow scheduling on any day
+					if (cyclesCompleted >= 1 && lessonsInCurrentCycle < scheduledDays.length) {
+						// Find which day in the cycle we're on
+						const dayInCycle = dayIndex % scheduledDays.length
+						const isScheduledDayInCycle = scheduledDays.includes(dayInCycle)
+						
+						// Allow scheduling if this is a scheduled day in the cycle, or if we need to catch up
+						if (isScheduledDayInCycle || lessonsInCurrentCycle < scheduledDays.filter(d => d <= dayInCycle).length) {
+							lessonsForToday = Math.min(remainingTotalLessons, 1) // Schedule one lesson per day in additional cycles
+						}
+					}
+				}
 			}
 			
 			let remainingTeacherLessons: Record<string, number> | undefined
@@ -2522,7 +2543,7 @@ function generateTimetableWithState(
 							}
 							return false
 						})
-					)
+					})
 
 					if (allParticipantsAvailable) {
 						// Use custom duration if set, otherwise use slot duration
