@@ -1813,35 +1813,49 @@ const studentState: Record<string, {
 				const lessonsScheduledSoFar = studentProgress[s.name].scheduled
 				
 				if (scheduledDays.length > 0) {
-					// Calculate which cycle we're in and which day of that cycle
-					const cycleNumber = Math.floor(dayIndex / scheduledDays.length)
-					const dayInCycle = dayIndex % scheduledDays.length
-					const isScheduledDayInCycle = scheduledDays.includes(dayInCycle)
-					
-					// Count lessons scheduled in the current cycle
+					// Calculate which cycle we're in based on how many lessons have been scheduled
+					// Each cycle has scheduledDays.length lessons (one per scheduled day)
+					const cycleNumber = Math.floor(lessonsScheduledSoFar / scheduledDays.length)
 					const lessonsInCurrentCycle = lessonsScheduledSoFar % scheduledDays.length
 					
+					// Check if today is a scheduled day in the distribution pattern
+					const isScheduledDay = scheduledDays.includes(dayIndex)
+					
 					// How many lessons should be scheduled by this point in the current cycle
-					const targetLessonsInCycle = scheduledDays.filter(d => d <= dayInCycle).length
+					const scheduledDaysPassedInCycle = scheduledDays.filter(d => d <= dayIndex).length
 					
-					// Calculate lessons for today based on distribution
-					if (isScheduledDayInCycle) {
-						// This is a scheduled day - check if we need to schedule a lesson
-						const shouldSchedule = lessonsInCurrentCycle < targetLessonsInCycle
-						lessonsForToday = shouldSchedule ? Math.min(remainingTotalLessons, 1) : 0
-					} else {
-						// Not a scheduled day - only schedule if we're behind
-						const behindBy = targetLessonsInCycle - lessonsInCurrentCycle
-						lessonsForToday = behindBy > 0 ? Math.min(remainingTotalLessons, behindBy) : 0
-					}
-					
-					// If we've completed the first cycle and still need more lessons, continue with additional cycles
-					// Each cycle follows the same distribution pattern
-					if (cycleNumber >= 1 && remainingTotalLessons > 0) {
-						// In additional cycles, use the same logic but for the current cycle position
-						if (isScheduledDayInCycle && lessonsInCurrentCycle < targetLessonsInCycle) {
+					// Calculate lessons for today
+					if (isScheduledDay) {
+						// This is a scheduled day
+						if (lessonsInCurrentCycle < scheduledDaysPassedInCycle) {
+							// We're behind in the current cycle, schedule a lesson
 							lessonsForToday = Math.min(remainingTotalLessons, 1)
+						} else if (cycleNumber >= 1 && remainingTotalLessons > 0) {
+							// We've completed at least one full cycle and still need more lessons
+							// In additional cycles, we schedule lessons on scheduled days following the same pattern
+							// Calculate how many lessons we still need from additional cycles
+							const lessonsNeededFromAdditionalCycles = s.desiredLessons - (cycleNumber * scheduledDays.length)
+							
+							// Calculate which position this day is in the cycle (0-based)
+							const dayPositionInCycle = scheduledDays.indexOf(dayIndex)
+							
+							// Check if we should schedule a lesson on this day in the current cycle
+							// We schedule lessons on scheduled days in order until we meet the total
+							// For example, if we need 2 more lessons and this is day 0 (position 0), schedule it
+							// If we need 2 more lessons and this is day 1 (position 1), schedule it
+							// If we need 2 more lessons and this is day 2 (position 2), don't schedule (we only need 2)
+							if (dayPositionInCycle < lessonsNeededFromAdditionalCycles) {
+								lessonsForToday = Math.min(remainingTotalLessons, 1)
+							} else {
+								lessonsForToday = 0
+							}
+						} else {
+							lessonsForToday = 0
 						}
+					} else {
+						// Not a scheduled day - only schedule if we're behind in the current cycle
+						const behindBy = scheduledDaysPassedInCycle - lessonsInCurrentCycle
+						lessonsForToday = behindBy > 0 ? Math.min(remainingTotalLessons, behindBy) : 0
 					}
 				} else {
 					// No scheduled days (shouldn't happen with distributeLessons, but handle gracefully)
