@@ -976,6 +976,7 @@ const handleGenerateAutomaticSchedule = () => {
 					teacherLessons: finalTeacherLessons,
 					unavailableDates: [],
 					baseGroup: pair.baseGroup,
+					unavailability: pair.unavailability, // Pass unavailability for day-specific checks
 				}
 			})
 			.filter((couple) => {

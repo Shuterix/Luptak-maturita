@@ -18,6 +18,7 @@ export interface Student {
 	preferredTimes?: string[] // preferred time slots (e.g., ["09:00-11:00", "14:00-16:00"])
 	weeklyLessons?: number // number of lessons per week
 	baseGroup?: string // e.g., 'juniors1', 'juniors2' - assigned by coaches
+	unavailability?: any // Weekly unavailability (times when CANNOT train) - day-specific
 }
 
 export interface Couple {
@@ -30,6 +31,7 @@ export interface Couple {
 	preferredTeacher?: string
 	baseGroup?: string // inherited from students, can be overridden
 	unavailableDates?: string[] // dates when either student cannot attend
+	unavailability?: any // Weekly unavailability (times when CANNOT train) - day-specific
 }
 
 export interface GroupLesson {
@@ -223,6 +225,64 @@ const isStudentAvailableOnDate = (student: Student, date: string) => {
 	if (!student.unavailableDates || student.unavailableDates.length === 0) return true
 	const normalizedDate = date.split("T")[0]
 	return !student.unavailableDates.includes(normalizedDate)
+}
+
+// Check if a time slot is unavailable on a specific day of the week
+const isTimeUnavailableOnDay = (unavailability: any, date: string, startTime: Date, endTime: Date): boolean => {
+	if (!unavailability) return false
+	
+	// Get day of week from date
+	const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+	const dateObj = new Date(date)
+	const dayOfWeek = dayNames[dateObj.getDay()]
+	
+	// Helper to get windows from either format (direct day props or nested days Map)
+	const getWindowsForDay = (day: string): Array<{ start: string; end: string }> => {
+		if (!unavailability) return []
+		// Try direct day property first (new format)
+		if (unavailability[day] && Array.isArray(unavailability[day])) {
+			return unavailability[day]
+		}
+		// Try nested days Map format (old format)
+		if (unavailability.days) {
+			if (unavailability.days.get && typeof unavailability.days.get === 'function') {
+				return unavailability.days.get(day) || []
+			}
+			if (unavailability.days[day] && Array.isArray(unavailability.days[day])) {
+				return unavailability.days[day]
+			}
+		}
+		return []
+	}
+	
+	const unavailWindows = getWindowsForDay(dayOfWeek)
+	if (unavailWindows.length === 0) return false
+	
+	// Convert time strings to minutes for comparison
+	const toMinutes = (time: string): number => {
+		const parts = time.split(':')
+		if (parts.length < 2) return 0
+		const [h, m] = parts.map(Number)
+		return (h || 0) * 60 + (m || 0)
+	}
+	
+	const slotStartMinutes = startTime.getHours() * 60 + startTime.getMinutes()
+	const slotEndMinutes = endTime.getHours() * 60 + endTime.getMinutes()
+	
+	// Check if the slot overlaps with any unavailable window
+	for (const window of unavailWindows) {
+		if (window.start && window.end) {
+			const unavailStart = toMinutes(window.start)
+			const unavailEnd = toMinutes(window.end)
+			
+			// Check if slot overlaps with unavailable window
+			if (slotStartMinutes < unavailEnd && slotEndMinutes > unavailStart) {
+				return true // Slot is unavailable
+			}
+		}
+	}
+	
+	return false // Slot is available
 }
 
 // const isTeacherAvailableOnDate = (teacher: Teacher, date: string) => {
@@ -855,8 +915,12 @@ export function generateTimetable(
 
 				if (availableTeacher) {
 					// Check all participants are available
-					const allParticipantsAvailable = groupLesson.participants.every(couple =>
-						couple.availability.some((a) => {
+					const allParticipantsAvailable = groupLesson.participants.every(couple => {
+						// Check day-specific unavailability first
+						if (couple.unavailability && isTimeUnavailableOnDay(couple.unavailability, date, lessonStart, lessonEnd)) {
+							return false
+						}
+						return couple.availability.some((a) => {
 							const [aStart, aEnd] = a.split("-")
 							const startTime = timeStringToDate(date, aStart)
 							const endTime = timeStringToDate(date, aEnd)
@@ -880,7 +944,7 @@ export function generateTimetable(
 							}
 							return false
 						})
-					)
+					})
 
 					if (allParticipantsAvailable) {
 						// Schedule the group lesson
@@ -956,8 +1020,12 @@ export function generateTimetable(
 
 				if (availableTeacher) {
 					// Check all participants are available
-					const allParticipantsAvailable = groupLesson.participants.every(couple =>
-						couple.availability.some((a) => {
+					const allParticipantsAvailable = groupLesson.participants.every(couple => {
+						// Check day-specific unavailability first
+						if (couple.unavailability && isTimeUnavailableOnDay(couple.unavailability, date, slot.start, slot.end)) {
+							return false
+						}
+						return couple.availability.some((a) => {
 							const [aStart, aEnd] = a.split("-")
 							const startTime = timeStringToDate(date, aStart)
 							const endTime = timeStringToDate(date, aEnd)
@@ -1222,6 +1290,11 @@ export function generateTimetable(
 
 			const availableStudent = sortedStudents.find((s) => {
 				if (studentLessonsCount[s.name] >= s.desiredLessons) return false
+
+				// Check day-specific unavailability first
+				if (s.unavailability && isTimeUnavailableOnDay(s.unavailability, date, slot.start, slot.end)) {
+					return false
+				}
 
 				// Availability
 				if (!s.availability.some((a) => {
@@ -2291,8 +2364,12 @@ function generateTimetableWithState(
 
 				if (availableTeacher) {
 					// Check all participants are available
-					const allParticipantsAvailable = groupLesson.participants.every(couple =>
-						couple.availability.some((a) => {
+					const allParticipantsAvailable = groupLesson.participants.every(couple => {
+						// Check day-specific unavailability first
+						if (couple.unavailability && isTimeUnavailableOnDay(couple.unavailability, date, lessonStart, lessonEnd)) {
+							return false
+						}
+						return couple.availability.some((a) => {
 							const [aStart, aEnd] = a.split("-")
 							const startTime = timeStringToDate(date, aStart)
 							const endTime = timeStringToDate(date, aEnd)
@@ -2316,7 +2393,7 @@ function generateTimetableWithState(
 							}
 							return false
 						})
-					)
+					})
 
 					if (allParticipantsAvailable) {
 						// Schedule the group lesson
@@ -2416,8 +2493,12 @@ function generateTimetableWithState(
 
 				if (availableTeacher) {
 					// Check all participants are available
-					const allParticipantsAvailable = groupLesson.participants.every(couple =>
-						couple.availability.some((a) => {
+					const allParticipantsAvailable = groupLesson.participants.every(couple => {
+						// Check day-specific unavailability first
+						if (couple.unavailability && isTimeUnavailableOnDay(couple.unavailability, date, slot.start, slot.end)) {
+							return false
+						}
+						return couple.availability.some((a) => {
 							const [aStart, aEnd] = a.split("-")
 							const startTime = timeStringToDate(date, aStart)
 							const endTime = timeStringToDate(date, aEnd)
@@ -2706,6 +2787,11 @@ function generateTimetableWithState(
 			const availableStudent = sortedStudents.find((s) => {
 				if (!isStudentAvailableOnDate(s, date)) return false
 				if (studentLessonsCount[s.name] >= s.desiredLessons) return false
+
+				// Check day-specific unavailability first
+				if (s.unavailability && isTimeUnavailableOnDay(s.unavailability, date, slot.start, slot.end)) {
+					return false
+				}
 
 				// Availability
 				if (!s.availability.some((a) => {
