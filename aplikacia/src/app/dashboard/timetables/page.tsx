@@ -1102,6 +1102,7 @@ const handleGenerateAutomaticSchedule = () => {
 					priority: 5, // Default priority
 					unavailableDates: [],
 					baseGroup: participant.baseGroup,
+					unavailability: dbCouple?.unavailability, // Pass unavailability for day-specific checks
 					// Create minimal Student objects for type compatibility
 					studentA: {
 						name: participant.studentA.name,
