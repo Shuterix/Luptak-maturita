@@ -1812,40 +1812,40 @@ const studentState: Record<string, {
 				const scheduledDays = studentLessonDays[s.name] || []
 				const lessonsScheduledSoFar = studentProgress[s.name].scheduled
 				
-				// Count how many of this student's lesson days have passed (including today)
-				const lessonDaysUpToToday = scheduledDays.filter(d => d <= dayIndex).length
-				// How many lessons should have been scheduled by end of today
-				const targetLessonsByToday = lessonDaysUpToToday
-				// How many more lessons should we schedule today to stay on track
-				lessonsForToday = Math.max(0, Math.min(remainingTotalLessons, targetLessonsByToday - lessonsScheduledSoFar))
-				
-				// If this isn't a scheduled day but we're behind, allow catch-up
-				if (lessonsForToday === 0 && remainingTotalLessons > 0) {
-					// Check if we're behind schedule
-					const behindBy = lessonDaysUpToToday - lessonsScheduledSoFar
-					if (behindBy > 0) {
-						lessonsForToday = Math.min(remainingTotalLessons, behindBy)
-					}
-				}
-				
-				// If we've completed a full distribution cycle but still need more lessons, continue scheduling
-				// This handles cases where desiredLessons > number of available days
-				if (lessonsForToday === 0 && remainingTotalLessons > 0 && scheduledDays.length > 0) {
-					// Check if we've completed at least one full cycle
-					const cyclesCompleted = Math.floor(lessonsScheduledSoFar / scheduledDays.length)
+				if (scheduledDays.length > 0) {
+					// Calculate which cycle we're in and which day of that cycle
+					const cycleNumber = Math.floor(dayIndex / scheduledDays.length)
+					const dayInCycle = dayIndex % scheduledDays.length
+					const isScheduledDayInCycle = scheduledDays.includes(dayInCycle)
+					
+					// Count lessons scheduled in the current cycle
 					const lessonsInCurrentCycle = lessonsScheduledSoFar % scheduledDays.length
 					
-					// If we're in a new cycle, allow scheduling on any day
-					if (cyclesCompleted >= 1 && lessonsInCurrentCycle < scheduledDays.length) {
-						// Find which day in the cycle we're on
-						const dayInCycle = dayIndex % scheduledDays.length
-						const isScheduledDayInCycle = scheduledDays.includes(dayInCycle)
-						
-						// Allow scheduling if this is a scheduled day in the cycle, or if we need to catch up
-						if (isScheduledDayInCycle || lessonsInCurrentCycle < scheduledDays.filter(d => d <= dayInCycle).length) {
-							lessonsForToday = Math.min(remainingTotalLessons, 1) // Schedule one lesson per day in additional cycles
+					// How many lessons should be scheduled by this point in the current cycle
+					const targetLessonsInCycle = scheduledDays.filter(d => d <= dayInCycle).length
+					
+					// Calculate lessons for today based on distribution
+					if (isScheduledDayInCycle) {
+						// This is a scheduled day - check if we need to schedule a lesson
+						const shouldSchedule = lessonsInCurrentCycle < targetLessonsInCycle
+						lessonsForToday = shouldSchedule ? Math.min(remainingTotalLessons, 1) : 0
+					} else {
+						// Not a scheduled day - only schedule if we're behind
+						const behindBy = targetLessonsInCycle - lessonsInCurrentCycle
+						lessonsForToday = behindBy > 0 ? Math.min(remainingTotalLessons, behindBy) : 0
+					}
+					
+					// If we've completed the first cycle and still need more lessons, continue with additional cycles
+					// Each cycle follows the same distribution pattern
+					if (cycleNumber >= 1 && remainingTotalLessons > 0) {
+						// In additional cycles, use the same logic but for the current cycle position
+						if (isScheduledDayInCycle && lessonsInCurrentCycle < targetLessonsInCycle) {
+							lessonsForToday = Math.min(remainingTotalLessons, 1)
 						}
 					}
+				} else {
+					// No scheduled days (shouldn't happen with distributeLessons, but handle gracefully)
+					lessonsForToday = remainingTotalLessons
 				}
 			}
 			
