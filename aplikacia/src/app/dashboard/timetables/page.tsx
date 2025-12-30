@@ -2488,7 +2488,6 @@ return (
 						Generate Timetable
 					</Button>
 				</div>
-			</div>
 
 				{autoError && (
 					<Alert variant="warning" className="max-w-3xl">
