@@ -2206,17 +2206,17 @@ const handleGenerateAutomaticSchedule = () => {
 	// Show list view if not viewing a specific timetable
 	if (!viewingTimetableId) {
 return (
-	<div className="max-w-6xl mx-auto px-6 py-10 space-y-10">
-	<header className="flex flex-wrap items-center justify-between gap-4">
+	<div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6 sm:space-y-10">
+	<header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 				<div>
-					<h1 className="text-3xl font-semibold">Timetable Manager</h1>
-						<p className="text-base-content/60">Create and manage your timetables.</p>
+					<h1 className="text-2xl sm:text-3xl font-semibold">Timetable Manager</h1>
+					<p className="text-sm sm:text-base text-base-content/60">Create and manage your timetables.</p>
 				</div>
-				<div className="flex items-center gap-3">
-						<Button onClick={() => setIsCreateModalOpen(true)} className="btn-primary">
-							Create Timetable
-						</Button>
-					<Button onClick={() => user?.clubId && fetchTimetables(user.clubId)} className="btn-outline">
+				<div className="flex items-center gap-2">
+					<Button onClick={() => setIsCreateModalOpen(true)} className="btn-primary btn-sm sm:btn-md flex-1 sm:flex-none">
+						Create Timetable
+					</Button>
+					<Button onClick={() => user?.clubId && fetchTimetables(user.clubId)} className="btn-outline btn-sm sm:btn-md">
 						Refresh
 					</Button>
 				</div>
@@ -2442,17 +2442,17 @@ return (
 
 	// Show editor view when viewing a specific timetable
 	return (
-		<div className="max-w-6xl mx-auto px-6 py-10 space-y-10">
-			<header className="flex flex-wrap items-center justify-between gap-4">
+		<div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6 sm:space-y-10">
+			<header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 				<div>
-					<h1 className="text-3xl font-semibold">Timetable Manager</h1>
-					<p className="text-base-content/60">Create, adjust, and save timetables with manual overrides and cascading shifts.</p>
+					<h1 className="text-2xl sm:text-3xl font-semibold">Timetable Manager</h1>
+					<p className="text-sm sm:text-base text-base-content/60">Create, adjust, and save timetables with manual overrides and cascading shifts.</p>
 				</div>
-				<div className="flex items-center gap-3">
-					<Button onClick={handleBackToList} className="btn-outline">
+				<div className="flex items-center gap-2">
+					<Button onClick={handleBackToList} className="btn-outline btn-sm sm:btn-md flex-1 sm:flex-none">
 						← Back to List
 					</Button>
-					<Button onClick={() => user?.clubId && fetchTimetables(user.clubId)} className="btn-outline">
+					<Button onClick={() => user?.clubId && fetchTimetables(user.clubId)} className="btn-outline btn-sm sm:btn-md">
 						Refresh
 					</Button>
 				</div>
@@ -2470,26 +2470,25 @@ return (
 			)}
 
 		<section className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
-			<div className="card-body space-y-6">
-				<div className="flex flex-wrap items-center justify-between gap-3">
-					<div>
-						<h2 className="card-title">Automatic Scheduler</h2>
-						<p className="text-sm text-base-content/60">
-							Configure teachers, couples, and breaks, then generate a timetable instantly. Make sure the timetable date range is set first.
-						</p>
-					</div>
-					<div className="flex gap-2">
-						<Button className="btn-outline" onClick={() => setIsEditorModalOpen(true)}>
-							Configure Group Lessons
-						</Button>
-						<Button className="btn-primary" onClick={() => setIsSchedulerModalOpen(true)}>
-							Configure Scheduler
-						</Button>
-						<Button className="btn-secondary" onClick={handleGenerateAutomaticSchedule}>
-							Generate Timetable
-						</Button>
-					</div>
+			<div className="card-body space-y-4">
+				<div>
+					<h2 className="card-title">Automatic Scheduler</h2>
+					<p className="text-sm text-base-content/60">
+						Configure teachers, couples, and breaks, then generate a timetable instantly. Make sure the timetable date range is set first.
+					</p>
 				</div>
+				<div className="flex flex-col sm:flex-row gap-2">
+					<Button className="btn-outline btn-sm sm:btn-md" onClick={() => setIsEditorModalOpen(true)}>
+						Configure Group Lessons
+					</Button>
+					<Button className="btn-primary btn-sm sm:btn-md" onClick={() => setIsSchedulerModalOpen(true)}>
+						Configure Scheduler
+					</Button>
+					<Button className="btn-secondary btn-sm sm:btn-md" onClick={handleGenerateAutomaticSchedule}>
+						Generate Timetable
+					</Button>
+				</div>
+			</div>
 
 				{autoError && (
 					<Alert variant="warning" className="max-w-3xl">
@@ -2500,21 +2499,19 @@ return (
 		</section>
 
 		<section className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
-			<div className="card-body">
-				<div className="flex flex-wrap items-center justify-between gap-3">
-					<div>
-						<h2 className="card-title">Timetable Configuration</h2>
-						<p className="text-sm text-base-content/60">
-							Configure timetable name, type, dates, and schedule settings.
-						</p>
-						</div>
-					<Button className="btn-primary" onClick={() => setIsConfigModalOpen(true)}>
-						Configure Timetable
-										</Button>
-								</div>
+			<div className="card-body space-y-4">
+				<div>
+					<h2 className="card-title">Timetable Configuration</h2>
+					<p className="text-sm text-base-content/60">
+						Configure timetable name, type, dates, and schedule settings.
+					</p>
+				</div>
+				<Button className="btn-primary btn-sm sm:btn-md w-full sm:w-auto" onClick={() => setIsConfigModalOpen(true)}>
+					Configure Timetable
+				</Button>
 				{form.name && (
-					<div className="mt-4 p-4 bg-base-200 rounded-xl">
-						<div className="grid grid-cols-2 gap-4 text-sm">
+					<div className="p-3 sm:p-4 bg-base-200 rounded-xl">
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
 							<div>
 								<span className="text-base-content/60">Name:</span> <span className="font-medium">{form.name}</span>
 							</div>
@@ -2536,26 +2533,28 @@ return (
 							<Button
 								disabled={!canSubmit || saving}
 								onClick={handleSaveTimetable}
-								className="btn-primary"
+								className="btn-primary btn-sm sm:btn-md w-full sm:w-auto"
 							>
 								{saving ? 'Saving…' : 'Save timetable'}
-										</Button>
-								</div>
-								</div>
+							</Button>
+						</div>
+					</div>
 				)}
-							</div>
+			</div>
 		</section>
 
 		<section className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
-			<div className="card-body space-y-6">
-				<div className="flex items-center justify-between">
-					<h2 className="card-title">Timetable</h2>
-					<div className="flex items-center gap-3">
+			<div className="card-body space-y-4">
+				<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+					<div className="flex items-center gap-2">
+						<h2 className="card-title">Timetable</h2>
 						<span className="badge badge-outline">{lessons.length} lessons</span>
-						<Button className="btn-outline" onClick={() => setShowTimetableFullscreen(true)}>
+					</div>
+					<div className="flex gap-2">
+						<Button className="btn-outline btn-sm sm:btn-md flex-1 sm:flex-none" onClick={() => setShowTimetableFullscreen(true)}>
 							Show Timetable
 						</Button>
-						<Button className="btn-primary" onClick={() => setIsAddStaticLessonModalOpen(true)}>
+						<Button className="btn-primary btn-sm sm:btn-md flex-1 sm:flex-none" onClick={() => setIsAddStaticLessonModalOpen(true)}>
 							Add Static Lesson
 						</Button>
 					</div>
@@ -2732,10 +2731,10 @@ return (
 
 				{showTimetableFullscreen && (
 					<div className="fixed inset-0 z-50 bg-base-100 overflow-y-auto">
-						<div className="max-w-7xl mx-auto px-6 py-8">
-							<div className="flex items-center justify-between mb-6">
-								<h2 className="text-2xl font-semibold">{form.name || 'Timetable'}</h2>
-								<Button className="btn-ghost" onClick={() => setShowTimetableFullscreen(false)}>
+						<div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
+							<div className="flex items-center justify-between gap-2 mb-4 sm:mb-6">
+								<h2 className="text-lg sm:text-2xl font-semibold truncate">{form.name || 'Timetable'}</h2>
+								<Button className="btn-ghost btn-sm sm:btn-md flex-shrink-0" onClick={() => setShowTimetableFullscreen(false)}>
 									✕ Close
 								</Button>
 							</div>
