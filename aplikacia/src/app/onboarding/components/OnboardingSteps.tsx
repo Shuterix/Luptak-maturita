@@ -86,8 +86,19 @@ export default function OnboardingSteps() {
 		if (initialized && userData && Object.keys(userData).length > 0) {
 			const updated = { ...userData, createNewClub: null }
 			setNewUserData(updated)
+			
+			// Check if onboarding is already complete and redirect to dashboard
+			const onboardingStep = userData.onboardingStep ?? 0
+			const role = userData.role
+			const onboardingComplete = role === 'trainer' 
+				? onboardingStep >= 2 
+				: onboardingStep >= 1
+			
+			if (onboardingComplete) {
+				router.push('/dashboard')
+			}
 		}
-	}, [initialized, userData])
+	}, [initialized, userData, router])
 
 	useEffect(() => {
 		const handleUnload = () => {

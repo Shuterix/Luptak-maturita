@@ -78,7 +78,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 				localStorage.setItem('dancehub_USER', JSON.stringify(normalizedUser))
 				showAlertToast('Login successful!', { variant: 'success', title: 'Success' })
 
-				if (data.user.onboardingStep === 4) {
+				// Check if onboarding is complete based on role
+				// Trainers: onboardingStep >= 2, Students: onboardingStep >= 1
+				const onboardingComplete = data.user.role === 'trainer' 
+					? (data.user.onboardingStep ?? 0) >= 2 
+					: (data.user.onboardingStep ?? 0) >= 1
+				
+				if (onboardingComplete) {
 					router.push('/dashboard')
 				} else {
 					router.push('/onboarding')

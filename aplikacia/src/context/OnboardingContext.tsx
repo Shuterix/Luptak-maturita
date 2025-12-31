@@ -62,7 +62,7 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
 		try {
 			await axios.patch('/api/users/update-onboarding', {
 				userId: data._id,
-				onboardingStep: step === 2 ? step -1 : step,
+				onboardingStep: step,
 				role: data.role,
 			})
 		} catch (err) {
