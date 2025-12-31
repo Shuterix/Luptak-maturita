@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { Users, GraduationCap, UserCheck, Mail, Phone, Heart } from 'lucide-react'
+import { Users, GraduationCap, UserCheck, Mail, Phone, Heart, Key, RefreshCw, Copy, Check } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { showAlertToast } from '@/components/toast/Toast'
 
 interface UserData {
 	_id: string
@@ -21,6 +22,7 @@ interface ClubData {
 	name: string
 	description?: string
 	coupleCount: number
+	code?: string // Only available for trainers
 }
 
 export default function ClubOverviewPage() {
@@ -30,6 +32,8 @@ export default function ClubOverviewPage() {
 	const [club, setClub] = useState<ClubData | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
+	const [regenerating, setRegenerating] = useState(false)
+	const [copied, setCopied] = useState(false)
 	const isMobile = useMediaQuery('(max-width: 768px)')
 
 	useEffect(() => {
@@ -79,6 +83,50 @@ export default function ClubOverviewPage() {
 			setError(err.message || 'Failed to load club members')
 		} finally {
 			setLoading(false)
+		}
+	}
+
+	const handleRegenerateCode = async () => {
+		if (!user?.clubId || user.role !== 'trainer') return
+
+		if (!confirm('Are you sure you want to regenerate the club code? Students will need the new code to join.')) {
+			return
+		}
+
+		setRegenerating(true)
+		try {
+			const res = await fetch(`/api/clubs/${user.clubId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+			})
+
+			if (!res.ok) {
+				const data = await res.json()
+				throw new Error(data.error || 'Failed to regenerate club code')
+			}
+
+			const data = await res.json()
+			setClub((prev) => prev ? { ...prev, code: data.code } : null)
+			showAlertToast('Club code regenerated successfully', { variant: 'success' })
+		} catch (err: any) {
+			console.error('Error regenerating club code:', err)
+			showAlertToast(err.message || 'Failed to regenerate club code', { variant: 'error' })
+		} finally {
+			setRegenerating(false)
+		}
+	}
+
+	const handleCopyCode = async () => {
+		if (!club?.code) return
+		
+		try {
+			await navigator.clipboard.writeText(club.code)
+			setCopied(true)
+			showAlertToast('Club code copied to clipboard', { variant: 'success' })
+			setTimeout(() => setCopied(false), 2000)
+		} catch (err) {
+			console.error('Failed to copy code:', err)
+			showAlertToast('Failed to copy code', { variant: 'error' })
 		}
 	}
 
@@ -150,6 +198,46 @@ export default function ClubOverviewPage() {
 						<h2 className="text-xl sm:text-2xl font-bold mb-2">{club.name}</h2>
 						{club.description && (
 							<p className="text-sm sm:text-base text-base-content/70 mb-2">{club.description}</p>
+						)}
+						{/* Club Code Section - Only for trainers */}
+						{user?.role === 'trainer' && club.code && (
+							<div className="mt-4 p-4 bg-base-200 rounded-lg border border-base-300">
+								<div className="flex items-center gap-2 mb-2">
+									<Key className="h-5 w-5 text-primary" />
+									<h3 className="font-semibold text-base">Club Code</h3>
+								</div>
+								<p className="text-xs text-base-content/60 mb-3">
+									Share this code with students so they can join your club. Regenerate it for security purposes.
+								</p>
+								<div className="flex items-center gap-2 flex-wrap">
+									<div className="flex-1 min-w-[200px]">
+										<div className="flex items-center gap-2 p-3 bg-base-100 rounded-lg border border-base-300">
+											<code className="flex-1 text-lg font-mono font-bold text-primary">
+												{club.code}
+											</code>
+											<button
+												onClick={handleCopyCode}
+												className="btn btn-ghost btn-sm btn-square"
+												title="Copy code"
+											>
+												{copied ? (
+													<Check className="h-4 w-4 text-success" />
+												) : (
+													<Copy className="h-4 w-4" />
+												)}
+											</button>
+										</div>
+									</div>
+									<button
+										onClick={handleRegenerateCode}
+										disabled={regenerating}
+										className="btn btn-outline btn-warning btn-sm gap-2"
+									>
+										<RefreshCw className={`h-4 w-4 ${regenerating ? 'animate-spin' : ''}`} />
+										{regenerating ? 'Regenerating...' : 'Regenerate'}
+									</button>
+								</div>
+							</div>
 						)}
 					</div>
 				)}
