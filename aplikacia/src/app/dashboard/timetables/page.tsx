@@ -47,6 +47,7 @@ interface LessonForm {
 	teacherName?: string
 	roomLabel?: string
 	studentNames: string[]
+	pairLabel?: string // For couple lessons: the couple name (e.g., "Alex Karlik & Niki Stefancova")
 	locked: boolean
 	manualOverride: boolean
 	notes?: string
@@ -336,6 +337,7 @@ const convertToApiLesson = (lesson: LessonForm, fallbackDuration: number) => {
 		teacherName: lesson.teacherName,
 		roomLabel: lesson.roomLabel,
 		studentNames: lesson.studentNames,
+		pairLabel: lesson.pairLabel, // Include pairLabel for couple lessons
 		date: lesson.date,
 		start: startIso,
 		end: endIso,
@@ -372,6 +374,7 @@ const convertFromApiLesson = (lesson: any): LessonForm => {
 		teacherName: lesson.teacherName ?? undefined,
 		roomLabel: lesson.roomLabel ?? undefined,
 		studentNames: lesson.studentNames ?? [],
+		pairLabel: lesson.pairLabel ?? undefined, // Include pairLabel for couple lessons
 		locked: Boolean(lesson.locked),
 		manualOverride: lesson.manualOverride ?? true,
 		notes: lesson.notes ?? '',
@@ -387,12 +390,36 @@ const convertFromTimetableLesson = (lesson: TimetableLesson): LessonForm => {
 	const startTime = isoToLocalTime(startIso)
 	const endTime = isoToLocalTime(endIso)
 	const studentNamesFromString = lesson.student ? lesson.student.split(',').map((s) => s.trim()).filter(Boolean) : []
-	const participantNames =
-		lesson.students && lesson.students.length
-			? lesson.students
-			: lesson.couples && lesson.couples.length
-				? lesson.couples
-				: studentNamesFromString
+	
+	// Handle couple lessons: split couple names into individual student names
+	let participantNames: string[] = []
+	let pairLabel: string | undefined = undefined
+	
+	if (lesson.students && lesson.students.length) {
+		// Group lesson with individual students
+		participantNames = lesson.students
+	} else if (lesson.couples && lesson.couples.length) {
+		// Couple or group lesson with couples
+		// Split each couple name (e.g., "Alex Karlik & Niki Stefancova") into individual names
+		participantNames = []
+		lesson.couples.forEach(coupleName => {
+			// Split by " & " to get individual student names
+			const names = coupleName.split(' & ').map(n => n.trim()).filter(Boolean)
+			participantNames.push(...names)
+			// Store the couple name as pairLabel for the first couple (for couple lessons)
+			if (!pairLabel && lesson.lessonType === 'couple') {
+				pairLabel = coupleName
+			}
+		})
+	} else if (lesson.couple) {
+		// Single couple lesson
+		const names = lesson.couple.split(' & ').map(n => n.trim()).filter(Boolean)
+		participantNames = names
+		pairLabel = lesson.couple
+	} else {
+		participantNames = studentNamesFromString
+	}
+	
 	// Prioritize lessonType from algorithm, then infer from participant count
 	const inferredLessonType =
 		lesson.lessonType ??
@@ -412,6 +439,7 @@ const convertFromTimetableLesson = (lesson: TimetableLesson): LessonForm => {
 		teacherName: lesson.teacher ?? undefined,
 		roomLabel: lesson.room ?? undefined,
 		studentNames: participantNames,
+		pairLabel: pairLabel, // Add pairLabel for couple lessons
 		locked: false,
 		manualOverride: false,
 		notes: lesson.groupName ? `Group: ${lesson.groupName}` : '', // Add group name as note for group lessons
