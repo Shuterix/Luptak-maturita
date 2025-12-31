@@ -57,6 +57,9 @@ export default function CouplesPage() {
 	})
 	const [newGroupName, setNewGroupName] = useState('')
 	const [showNewGroupInput, setShowNewGroupInput] = useState(false)
+	const [creatingGroup, setCreatingGroup] = useState(false)
+	const [deletingGroup, setDeletingGroup] = useState<string | null>(null)
+	const [groupToDelete, setGroupToDelete] = useState<string | null>(null)
 
 	useEffect(() => {
 		// Wait for AuthContext to finish loading
@@ -360,6 +363,86 @@ export default function CouplesPage() {
 		}))
 	}
 
+	const handleCreateGroup = async () => {
+		if (!newGroupName.trim()) {
+			setError('Group name cannot be empty')
+			return
+		}
+
+		if (availableGroups.includes(newGroupName.trim())) {
+			setError('Group already exists')
+			return
+		}
+
+		setCreatingGroup(true)
+		setError(null)
+		try {
+			// Add to available groups immediately (optimistic update)
+			setAvailableGroups([...availableGroups, newGroupName.trim()].sort())
+			setNewGroupName('')
+			showAlertToast('Group created successfully', { variant: 'success' })
+		} catch (err: any) {
+			setError(err.message || 'Failed to create group')
+			showAlertToast(err.message || 'Failed to create group', { variant: 'error' })
+		} finally {
+			setCreatingGroup(false)
+		}
+	}
+
+	const handleDeleteGroup = async (groupName: string) => {
+		if (!confirm(`Are you sure you want to delete the group "${groupName}"? This will remove the group assignment from all couples that have it.`)) {
+			return
+		}
+
+		setDeletingGroup(groupName)
+		setError(null)
+		try {
+			// Remove group from all pairs that have it
+			const pairsWithGroup = pairs.filter(p => p.baseGroup === groupName)
+			
+			// Update all pairs to remove the group
+			await Promise.all(
+				pairsWithGroup.map(pair =>
+					fetch(`/api/pairs/${pair._id}`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							studentAId: pair.studentAId._id,
+							studentBId: pair.studentBId._id,
+							baseGroup: undefined, // Remove group
+							preferredTeacherId: pair.preferredTeacherId?._id || undefined,
+						}),
+					})
+				)
+			)
+
+			// Remove from available groups
+			setAvailableGroups(availableGroups.filter(g => g !== groupName))
+			
+			// Refresh pairs to update the UI
+			await fetchPairs()
+			
+			showAlertToast(`Group "${groupName}" deleted successfully`, { variant: 'success' })
+		} catch (err: any) {
+			setError(err.message || 'Failed to delete group')
+			showAlertToast(err.message || 'Failed to delete group', { variant: 'error' })
+		} finally {
+			setDeletingGroup(null)
+			setGroupToDelete(null)
+		}
+	}
+
+	// Count couples per group
+	const groupCounts = useMemo(() => {
+		const counts: Record<string, number> = {}
+		pairs.forEach(pair => {
+			if (pair.baseGroup) {
+				counts[pair.baseGroup] = (counts[pair.baseGroup] || 0) + 1
+			}
+		})
+		return counts
+	}, [pairs])
+
 	if (loading) {
 		return (
 			<div className="flex items-center justify-center min-h-screen">
@@ -413,6 +496,76 @@ export default function CouplesPage() {
 					<span>No students found. Please add students through the Users page.</span>
 				</div>
 			)}
+
+			{/* Groups Management Section */}
+			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
+				<div className="card-body">
+					<div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+						<h2 className="card-title">Groups Management</h2>
+						<div className="flex gap-2">
+							<input
+								type="text"
+								placeholder="New group name..."
+								className="input input-bordered input-sm w-48"
+								value={newGroupName}
+								onChange={(e) => setNewGroupName(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === 'Enter' && newGroupName.trim()) {
+										handleCreateGroup()
+									}
+								}}
+							/>
+							<Button
+								className="btn-primary btn-sm"
+								onClick={handleCreateGroup}
+								disabled={creatingGroup || !newGroupName.trim()}
+							>
+								{creatingGroup ? (
+									<>
+										<span className="loading loading-spinner loading-xs"></span>
+										Creating...
+									</>
+								) : (
+									'Create Group'
+								)}
+							</Button>
+						</div>
+					</div>
+
+					{availableGroups.length === 0 ? (
+						<p className="text-base-content/60">
+							No groups created yet. Create a group to organize your couples.
+						</p>
+					) : (
+						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+							{availableGroups.map((group) => (
+								<div
+									key={group}
+									className="flex items-center justify-between p-3 bg-base-200 rounded-lg border border-base-300"
+								>
+									<div className="flex items-center gap-2">
+										<span className="badge badge-outline badge-lg font-semibold">{group}</span>
+										<span className="text-sm text-base-content/60">
+											{groupCounts[group] || 0} couple{groupCounts[group] !== 1 ? 's' : ''}
+										</span>
+									</div>
+									<Button
+										className="btn-ghost btn-sm text-error hover:bg-error/10"
+										onClick={() => setGroupToDelete(group)}
+										disabled={deletingGroup === group}
+									>
+										{deletingGroup === group ? (
+											<span className="loading loading-spinner loading-xs"></span>
+										) : (
+											'Delete'
+										)}
+									</Button>
+								</div>
+							))}
+						</div>
+					)}
+				</div>
+			</div>
 
 			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
 				<div className="card-body">
@@ -808,6 +961,57 @@ export default function CouplesPage() {
 								</Button>
 							</div>
 						</form>
+					</div>
+				</div>
+			)}
+
+			{/* Delete Group Confirmation Modal */}
+			{groupToDelete && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+					<div className="w-full max-w-md rounded-2xl bg-base-200 shadow-2xl border border-base-300">
+						<div className="flex items-center justify-between border-b border-base-300 px-6 py-4">
+							<h3 className="text-lg font-semibold text-base-content">Confirm Delete Group</h3>
+							<button
+								type="button"
+								className="btn btn-ghost btn-sm"
+								onClick={() => setGroupToDelete(null)}
+							>
+								✕
+							</button>
+						</div>
+						<div className="p-6">
+							<p className="text-base-content mb-4">
+								Are you sure you want to delete the group <strong>"{groupToDelete}"</strong>?
+							</p>
+							<p className="text-sm text-base-content/60 mb-6">
+								This will remove the group assignment from {groupCounts[groupToDelete] || 0} couple{groupCounts[groupToDelete] !== 1 ? 's' : ''}. 
+								The couples themselves will not be deleted, only their group assignment.
+							</p>
+							<div className="flex justify-end gap-3">
+								<Button
+									type="button"
+									className="btn-secondary"
+									onClick={() => setGroupToDelete(null)}
+								>
+									Cancel
+								</Button>
+								<Button
+									type="button"
+									className="btn-error"
+									onClick={() => handleDeleteGroup(groupToDelete)}
+									disabled={deletingGroup === groupToDelete}
+								>
+									{deletingGroup === groupToDelete ? (
+										<>
+											<span className="loading loading-spinner loading-sm"></span>
+											Deleting...
+										</>
+									) : (
+										'Delete Group'
+									)}
+								</Button>
+							</div>
+						</div>
 					</div>
 				</div>
 			)}
