@@ -1,0 +1,184 @@
+==========================================
+UNAVAILABILITY OBJECTS - READY TO PASTE
+==========================================
+
+Copy any of these unavailability objects and paste them into MongoDB Compass
+in the 'unavailability' field of your user documents.
+
+==========================================
+EXAMPLE 1: Work schedule (mornings unavailable)
+==========================================
+{
+  "timezone": "UTC",
+  "monday": [{"start": "08:00", "end": "12:00"}],
+  "tuesday": [{"start": "08:00", "end": "12:00"}],
+  "wednesday": [{"start": "08:00", "end": "12:00"}],
+  "thursday": [{"start": "08:00", "end": "12:00"}],
+  "friday": [{"start": "08:00", "end": "12:00"}],
+  "saturday": [],
+  "sunday": []
+}
+
+==========================================
+EXAMPLE 2: School schedule (until 15:00)
+==========================================
+{
+  "timezone": "UTC",
+  "monday": [{"start": "08:00", "end": "15:00"}],
+  "tuesday": [{"start": "08:00", "end": "15:00"}],
+  "wednesday": [{"start": "08:00", "end": "15:00"}],
+  "thursday": [{"start": "08:00", "end": "15:00"}],
+  "friday": [{"start": "08:00", "end": "15:00"}],
+  "saturday": [],
+  "sunday": []
+}
+
+==========================================
+EXAMPLE 3: Split schedule (mornings and evenings)
+==========================================
+{
+  "timezone": "UTC",
+  "monday": [{"start": "08:00", "end": "10:00"}, {"start": "18:00", "end": "20:00"}],
+  "tuesday": [{"start": "08:00", "end": "10:00"}, {"start": "18:00", "end": "20:00"}],
+  "wednesday": [{"start": "08:00", "end": "10:00"}, {"start": "18:00", "end": "20:00"}],
+  "thursday": [{"start": "08:00", "end": "10:00"}, {"start": "18:00", "end": "20:00"}],
+  "friday": [{"start": "08:00", "end": "10:00"}, {"start": "18:00", "end": "20:00"}],
+  "saturday": [],
+  "sunday": []
+}
+
+==========================================
+EXAMPLE 4: Evening work (afternoons/evenings unavailable)
+==========================================
+{
+  "timezone": "UTC",
+  "monday": [{"start": "16:00", "end": "20:00"}],
+  "tuesday": [{"start": "16:00", "end": "20:00"}],
+  "wednesday": [{"start": "16:00", "end": "20:00"}],
+  "thursday": [{"start": "16:00", "end": "20:00"}],
+  "friday": [{"start": "16:00", "end": "20:00"}],
+  "saturday": [],
+  "sunday": []
+}
+
+==========================================
+EXAMPLE 5: Lunch break unavailability
+==========================================
+{
+  "timezone": "UTC",
+  "monday": [{"start": "12:00", "end": "13:30"}],
+  "tuesday": [{"start": "12:00", "end": "13:30"}],
+  "wednesday": [{"start": "12:00", "end": "13:30"}],
+  "thursday": [{"start": "12:00", "end": "13:30"}],
+  "friday": [{"start": "12:00", "end": "13:30"}],
+  "saturday": [],
+  "sunday": []
+}
+
+==========================================
+EXAMPLE 6: Weekend morning unavailable
+==========================================
+{
+  "timezone": "UTC",
+  "monday": [],
+  "tuesday": [],
+  "wednesday": [],
+  "thursday": [],
+  "friday": [],
+  "saturday": [{"start": "08:00", "end": "13:00"}],
+  "sunday": []
+}
+
+==========================================
+EXAMPLE 7: Complex schedule (multiple windows)
+==========================================
+{
+  "timezone": "UTC",
+  "monday": [{"start": "08:00", "end": "10:00"}, {"start": "12:00", "end": "13:00"}, {"start": "17:00", "end": "19:00"}],
+  "tuesday": [{"start": "08:00", "end": "10:00"}, {"start": "12:00", "end": "13:00"}, {"start": "17:00", "end": "19:00"}],
+  "wednesday": [{"start": "08:00", "end": "10:00"}, {"start": "12:00", "end": "13:00"}, {"start": "17:00", "end": "19:00"}],
+  "thursday": [{"start": "08:00", "end": "10:00"}, {"start": "12:00", "end": "13:00"}, {"start": "17:00", "end": "19:00"}],
+  "friday": [{"start": "08:00", "end": "10:00"}, {"start": "12:00", "end": "13:00"}, {"start": "17:00", "end": "19:00"}],
+  "saturday": [],
+  "sunday": []
+}
+
+==========================================
+EXAMPLE 8: Fully available (empty)
+==========================================
+{
+  "timezone": "UTC",
+  "monday": [],
+  "tuesday": [],
+  "wednesday": [],
+  "thursday": [],
+  "friday": [],
+  "saturday": [],
+  "sunday": []
+}
+
+==========================================
+EXAMPLE 9: With exceptions (specific dates)
+==========================================
+{
+  "timezone": "UTC",
+  "monday": [{"start": "08:00", "end": "12:00"}],
+  "tuesday": [{"start": "08:00", "end": "12:00"}],
+  "wednesday": [{"start": "08:00", "end": "12:00"}],
+  "thursday": [{"start": "08:00", "end": "12:00"}],
+  "friday": [{"start": "08:00", "end": "12:00"}],
+  "saturday": [],
+  "sunday": [],
+  "exceptions": [
+    {"date": "2026-01-15", "windows": [{"start": "08:00", "end": "20:00"}]},
+    {"date": "2026-01-20", "windows": [{"start": "14:00", "end": "18:00"}]}
+  ]
+}
+
+==========================================
+HOW TO USE IN MONGODB COMPASS:
+==========================================
+
+1. Open MongoDB Compass
+2. Connect to your database
+3. Navigate to the 'users' collection
+4. Find the user document you want to update
+5. Click the "Edit Document" button (pencil icon)
+6. Find the 'unavailability' field
+7. If it doesn't exist, click "+" to add a new field
+8. Select the field type as "Object" or "Document"
+9. Copy one of the unavailability objects above
+10. Paste it into the field (you can paste the entire JSON object)
+11. Click "Update" to save
+
+ALTERNATIVE: Using MongoDB Shell
+==========================================
+
+db.users.updateOne(
+  { _id: ObjectId("YOUR_USER_ID_HERE") },
+  { $set: { 
+    unavailability: {
+      timezone: "UTC",
+      monday: [{"start": "08:00", "end": "12:00"}],
+      tuesday: [{"start": "08:00", "end": "12:00"}],
+      wednesday: [{"start": "08:00", "end": "12:00"}],
+      thursday: [{"start": "08:00", "end": "12:00"}],
+      friday: [{"start": "08:00", "end": "12:00"}],
+      saturday: [],
+      sunday: []
+    }
+  }}
+)
+
+Replace "YOUR_USER_ID_HERE" with the actual ObjectId of the user.
+
+==========================================
+NOTES:
+==========================================
+
+- Time format is "HH:mm" (24-hour format)
+- Empty arrays [] mean the student is available all day
+- You can have multiple time windows per day
+- Exceptions are optional and used for specific dates
+- Timezone defaults to "UTC" but can be changed
+

@@ -1,0 +1,301 @@
+{
+  "examples": [
+    {
+      "description": "Student with work schedule - unavailable mornings on weekdays",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [
+          { "start": "08:00", "end": "12:00" }
+        ],
+        "tuesday": [
+          { "start": "08:00", "end": "12:00" }
+        ],
+        "wednesday": [
+          { "start": "08:00", "end": "12:00" }
+        ],
+        "thursday": [
+          { "start": "08:00", "end": "12:00" }
+        ],
+        "friday": [
+          { "start": "08:00", "end": "12:00" }
+        ],
+        "saturday": [],
+        "sunday": []
+      }
+    },
+    {
+      "description": "Student with school schedule - unavailable until afternoon on weekdays",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [
+          { "start": "08:00", "end": "15:00" }
+        ],
+        "tuesday": [
+          { "start": "08:00", "end": "15:00" }
+        ],
+        "wednesday": [
+          { "start": "08:00", "end": "15:00" }
+        ],
+        "thursday": [
+          { "start": "08:00", "end": "15:00" }
+        ],
+        "friday": [
+          { "start": "08:00", "end": "15:00" }
+        ],
+        "saturday": [],
+        "sunday": []
+      }
+    },
+    {
+      "description": "Student with split schedule - unavailable mornings and evenings",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [
+          { "start": "08:00", "end": "10:00" },
+          { "start": "18:00", "end": "20:00" }
+        ],
+        "tuesday": [
+          { "start": "08:00", "end": "10:00" },
+          { "start": "18:00", "end": "20:00" }
+        ],
+        "wednesday": [
+          { "start": "08:00", "end": "10:00" },
+          { "start": "18:00", "end": "20:00" }
+        ],
+        "thursday": [
+          { "start": "08:00", "end": "10:00" },
+          { "start": "18:00", "end": "20:00" }
+        ],
+        "friday": [
+          { "start": "08:00", "end": "10:00" },
+          { "start": "18:00", "end": "20:00" }
+        ],
+        "saturday": [],
+        "sunday": []
+      }
+    },
+    {
+      "description": "Student with weekend commitments - unavailable Saturday mornings",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [],
+        "tuesday": [],
+        "wednesday": [],
+        "thursday": [],
+        "friday": [],
+        "saturday": [
+          { "start": "08:00", "end": "13:00" }
+        ],
+        "sunday": []
+      }
+    },
+    {
+      "description": "Student with evening work - unavailable late afternoons and evenings",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [
+          { "start": "16:00", "end": "20:00" }
+        ],
+        "tuesday": [
+          { "start": "16:00", "end": "20:00" }
+        ],
+        "wednesday": [
+          { "start": "16:00", "end": "20:00" }
+        ],
+        "thursday": [
+          { "start": "16:00", "end": "20:00" }
+        ],
+        "friday": [
+          { "start": "16:00", "end": "20:00" }
+        ],
+        "saturday": [],
+        "sunday": []
+      }
+    },
+    {
+      "description": "Student with lunch break unavailability",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [
+          { "start": "12:00", "end": "13:30" }
+        ],
+        "tuesday": [
+          { "start": "12:00", "end": "13:30" }
+        ],
+        "wednesday": [
+          { "start": "12:00", "end": "13:30" }
+        ],
+        "thursday": [
+          { "start": "12:00", "end": "13:30" }
+        ],
+        "friday": [
+          { "start": "12:00", "end": "13:30" }
+        ],
+        "saturday": [],
+        "sunday": []
+      }
+    },
+    {
+      "description": "Student with early morning unavailability",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [
+          { "start": "07:00", "end": "09:00" }
+        ],
+        "tuesday": [
+          { "start": "07:00", "end": "09:00" }
+        ],
+        "wednesday": [
+          { "start": "07:00", "end": "09:00" }
+        ],
+        "thursday": [
+          { "start": "07:00", "end": "09:00" }
+        ],
+        "friday": [
+          { "start": "07:00", "end": "09:00" }
+        ],
+        "saturday": [],
+        "sunday": []
+      }
+    },
+    {
+      "description": "Student with complex schedule - multiple windows per day",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [
+          { "start": "08:00", "end": "10:00" },
+          { "start": "12:00", "end": "13:00" },
+          { "start": "17:00", "end": "19:00" }
+        ],
+        "tuesday": [
+          { "start": "08:00", "end": "10:00" },
+          { "start": "12:00", "end": "13:00" },
+          { "start": "17:00", "end": "19:00" }
+        ],
+        "wednesday": [
+          { "start": "08:00", "end": "10:00" },
+          { "start": "12:00", "end": "13:00" },
+          { "start": "17:00", "end": "19:00" }
+        ],
+        "thursday": [
+          { "start": "08:00", "end": "10:00" },
+          { "start": "12:00", "end": "13:00" },
+          { "start": "17:00", "end": "19:00" }
+        ],
+        "friday": [
+          { "start": "08:00", "end": "10:00" },
+          { "start": "12:00", "end": "13:00" },
+          { "start": "17:00", "end": "19:00" }
+        ],
+        "saturday": [
+          { "start": "10:00", "end": "12:00" }
+        ],
+        "sunday": []
+      }
+    },
+    {
+      "description": "Student with minimal unavailability - only Friday evenings",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [],
+        "tuesday": [],
+        "wednesday": [],
+        "thursday": [],
+        "friday": [
+          { "start": "18:00", "end": "20:00" }
+        ],
+        "saturday": [],
+        "sunday": []
+      }
+    },
+    {
+      "description": "Student with weekend unavailability",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [],
+        "tuesday": [],
+        "wednesday": [],
+        "thursday": [],
+        "friday": [],
+        "saturday": [
+          { "start": "08:00", "end": "14:00" }
+        ],
+        "sunday": [
+          { "start": "08:00", "end": "14:00" }
+        ]
+      }
+    },
+    {
+      "description": "Student with exceptions - specific dates unavailable",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [
+          { "start": "08:00", "end": "12:00" }
+        ],
+        "tuesday": [
+          { "start": "08:00", "end": "12:00" }
+        ],
+        "wednesday": [
+          { "start": "08:00", "end": "12:00" }
+        ],
+        "thursday": [
+          { "start": "08:00", "end": "12:00" }
+        ],
+        "friday": [
+          { "start": "08:00", "end": "12:00" }
+        ],
+        "saturday": [],
+        "sunday": [],
+        "exceptions": [
+          {
+            "date": "2026-01-15",
+            "windows": [
+              { "start": "08:00", "end": "20:00" }
+            ]
+          },
+          {
+            "date": "2026-01-20",
+            "windows": [
+              { "start": "14:00", "end": "18:00" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "description": "Student fully available - empty unavailability",
+      "unavailability": {
+        "timezone": "UTC",
+        "monday": [],
+        "tuesday": [],
+        "wednesday": [],
+        "thursday": [],
+        "friday": [],
+        "saturday": [],
+        "sunday": []
+      }
+    }
+  ],
+  "instructions": {
+    "how_to_use": "Copy the 'unavailability' object (without the description) and paste it into MongoDB",
+    "mongodb_compass": [
+      "1. Open MongoDB Compass",
+      "2. Connect to your database",
+      "3. Navigate to your 'users' collection",
+      "4. Find the user you want to update",
+      "5. Click 'Edit Document'",
+      "6. Find the 'unavailability' field",
+      "7. Replace it with one of the unavailability objects below (copy only the unavailability part, not the description)",
+      "8. Click 'Update' to save"
+    ],
+    "mongodb_shell": [
+      "Use this command format:",
+      "db.users.updateOne(",
+      "  { _id: ObjectId('YOUR_USER_ID') },",
+      "  { $set: { unavailability: { ...paste unavailability object here... } } }",
+      ")"
+    ],
+    "example_shell_command": "db.users.updateOne({ _id: ObjectId('507f1f77bcf86cd799439011') }, { $set: { unavailability: { timezone: 'UTC', monday: [{ start: '08:00', end: '12:00' }], tuesday: [{ start: '08:00', end: '12:00' }], wednesday: [{ start: '08:00', end: '12:00' }], thursday: [{ start: '08:00', end: '12:00' }], friday: [{ start: '08:00', end: '12:00' }], saturday: [], sunday: [] } } })"
+  }
+}
+

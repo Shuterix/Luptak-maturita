@@ -55,6 +55,8 @@ export default function CouplesPage() {
 		baseGroup: '',
 		preferredTeacherId: '',
 	})
+	const [newGroupName, setNewGroupName] = useState('')
+	const [showNewGroupInput, setShowNewGroupInput] = useState(false)
 
 	useEffect(() => {
 		// Wait for AuthContext to finish loading
@@ -183,6 +185,8 @@ export default function CouplesPage() {
 			baseGroup: '',
 			preferredTeacherId: '',
 		})
+		setShowNewGroupInput(false)
+		setNewGroupName('')
 	}
 
 	const handleSubmit = async (e: React.FormEvent) => {
@@ -671,18 +675,85 @@ export default function CouplesPage() {
 								<label className="label">
 									<span className="label-text">Base Group</span>
 								</label>
-								<select
-									className="select select-bordered w-full"
-									value={formData.baseGroup}
-									onChange={(e) => setFormData({ ...formData, baseGroup: e.target.value })}
-								>
-									<option value="">No group assigned</option>
-									{availableGroups.map((group) => (
-										<option key={group} value={group}>
-											{group}
-										</option>
-									))}
-								</select>
+								{!showNewGroupInput ? (
+									<div className="flex gap-2">
+										<select
+											className="select select-bordered flex-1"
+											value={formData.baseGroup}
+											onChange={(e) => {
+												if (e.target.value === '__create_new__') {
+													setShowNewGroupInput(true)
+													setFormData({ ...formData, baseGroup: '' })
+												} else {
+													setFormData({ ...formData, baseGroup: e.target.value })
+												}
+											}}
+										>
+											<option value="">No group assigned</option>
+											{availableGroups.map((group) => (
+												<option key={group} value={group}>
+													{group}
+												</option>
+											))}
+											<option value="__create_new__">+ Create New Group</option>
+										</select>
+									</div>
+								) : (
+									<div className="flex gap-2">
+										<input
+											type="text"
+											className="input input-bordered flex-1"
+											placeholder="Enter new group name..."
+											value={newGroupName}
+											onChange={(e) => setNewGroupName(e.target.value)}
+											onKeyDown={(e) => {
+												if (e.key === 'Enter') {
+													e.preventDefault()
+													if (newGroupName.trim()) {
+														setFormData({ ...formData, baseGroup: newGroupName.trim() })
+														setShowNewGroupInput(false)
+														setNewGroupName('')
+														// Add to available groups if not already there
+														if (!availableGroups.includes(newGroupName.trim())) {
+															setAvailableGroups([...availableGroups, newGroupName.trim()].sort())
+														}
+													}
+												} else if (e.key === 'Escape') {
+													setShowNewGroupInput(false)
+													setNewGroupName('')
+												}
+											}}
+											autoFocus
+										/>
+										<Button
+											type="button"
+											className="btn-primary btn-sm"
+											onClick={() => {
+												if (newGroupName.trim()) {
+													setFormData({ ...formData, baseGroup: newGroupName.trim() })
+													setShowNewGroupInput(false)
+													setNewGroupName('')
+													// Add to available groups if not already there
+													if (!availableGroups.includes(newGroupName.trim())) {
+														setAvailableGroups([...availableGroups, newGroupName.trim()].sort())
+													}
+												}
+											}}
+										>
+											Add
+										</Button>
+										<Button
+											type="button"
+											className="btn-ghost btn-sm"
+											onClick={() => {
+												setShowNewGroupInput(false)
+												setNewGroupName('')
+											}}
+										>
+											Cancel
+										</Button>
+									</div>
+								)}
 								<label className="label">
 									<span className="label-text-alt text-base-content/50">
 										Assign this couple to an age-based group for group lessons
