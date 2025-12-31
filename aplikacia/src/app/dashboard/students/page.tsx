@@ -42,15 +42,30 @@ interface StudentLesson {
 }
 
 const LESSON_TYPE_COLORS = {
-	group: 'bg-purple-100 border-purple-300 text-purple-800',
-	individual: 'bg-blue-100 border-blue-300 text-blue-800',
-	couple: 'bg-pink-100 border-pink-300 text-pink-800',
+	group: 'bg-gradient-to-br from-purple-500/10 to-purple-600/10 border-purple-400/30 text-purple-700 dark:text-purple-300',
+	individual: 'bg-gradient-to-br from-blue-500/10 to-blue-600/10 border-blue-400/30 text-blue-700 dark:text-blue-300',
+	couple: 'bg-gradient-to-br from-pink-500/10 to-pink-600/10 border-pink-400/30 text-pink-700 dark:text-pink-300',
 }
 
 const LESSON_TYPE_LABELS = {
 	group: 'Group',
 	individual: 'Individual',
 	couple: 'Couple',
+}
+
+// Helper function to format time from ISO string
+const formatTime = (isoString: string): string => {
+	try {
+		const date = parseISO(isoString)
+		return format(date, 'h:mm a')
+	} catch {
+		return isoString
+	}
+}
+
+// Helper function to format time range
+const formatTimeRange = (start: string, end: string): string => {
+	return `${formatTime(start)} - ${formatTime(end)}`
 }
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -354,18 +369,27 @@ export default function StudentDashboard() {
 						</h3>
 
 						<div className="mt-4 space-y-4">
-							<div className="bg-base-200 rounded-lg p-3">
-								<p className="font-medium">{cancellingLesson.timetableName}</p>
-								<p className="text-sm text-base-content/70">
+							<div className="bg-base-200 rounded-lg p-4 space-y-2">
+								<p className="font-semibold text-lg">{cancellingLesson.timetableName}</p>
+								<div className="flex items-center gap-2 text-sm text-base-content/70">
+									<Calendar className="h-4 w-4" />
 									{format(parseISO(cancellingLesson.date), 'EEEE, MMMM d, yyyy')}
-								</p>
-								<p className="text-sm text-base-content/70">
-									{cancellingLesson.start} - {cancellingLesson.end}
-								</p>
+								</div>
+								<div className="flex items-center gap-2 text-sm text-base-content/70">
+									<Clock className="h-4 w-4" />
+									{formatTimeRange(cancellingLesson.start, cancellingLesson.end)}
+								</div>
 								{cancellingLesson.teacherName && (
-									<p className="text-sm text-base-content/70">
-										Teacher: {cancellingLesson.teacherName}
-									</p>
+									<div className="flex items-center gap-2 text-sm text-base-content/70">
+										<User className="h-4 w-4" />
+										{cancellingLesson.teacherName}
+									</div>
+								)}
+								{cancellingLesson.roomLabel && (
+									<div className="flex items-center gap-2 text-sm text-base-content/70">
+										<MapPin className="h-4 w-4" />
+										{cancellingLesson.roomLabel}
+									</div>
 								)}
 							</div>
 
@@ -432,51 +456,105 @@ function LessonCard({
 	compact?: boolean
 }) {
 	const isCancelled = lesson.status === 'cancelled'
-	const isPast = parseISO(lesson.date) < new Date()
+	const lessonDate = parseISO(lesson.date)
+	const isPast = lessonDate < new Date()
+	const isTodayLesson = isToday(lessonDate)
 
 	return (
 		<div
 			className={`
-				border rounded-lg p-2.5 transition-all
-				${isCancelled ? 'bg-base-200/50 border-base-300 opacity-60' : LESSON_TYPE_COLORS[lesson.lessonType]}
-				${!isCancelled && !isPast ? 'hover:shadow-md' : ''}
+				border-2 rounded-xl p-3 transition-all duration-200
+				${isCancelled 
+					? 'bg-base-200/50 border-base-300 opacity-60' 
+					: LESSON_TYPE_COLORS[lesson.lessonType] + ' shadow-sm'
+				}
+				${!isCancelled && !isPast ? 'hover:shadow-lg hover:scale-[1.02] cursor-pointer' : ''}
 			`}
 		>
-			{/* Time */}
-			<div className="flex items-center gap-1.5 text-sm font-semibold">
-				<Clock className="h-3.5 w-3.5" />
-				{lesson.start} - {lesson.end}
-			</div>
-
-			{/* Lesson Type Badge */}
-			<div className="mt-1.5">
-				<span className={`badge badge-sm ${isCancelled ? 'badge-ghost' : ''}`}>
-					{LESSON_TYPE_LABELS[lesson.lessonType]}
-				</span>
-				{isCancelled && (
-					<span className="badge badge-error badge-sm ml-1">Cancelled</span>
-				)}
+			{/* Header: Time and Type */}
+			<div className="flex items-start justify-between gap-2 mb-2">
+				<div className="flex-1">
+					<div className="flex items-center gap-2 mb-1.5">
+						<Clock className={`h-4 w-4 ${isCancelled ? 'text-base-content/40' : ''}`} />
+						<span className={`font-bold text-base ${isCancelled ? 'text-base-content/50' : ''}`}>
+							{formatTimeRange(lesson.start, lesson.end)}
+						</span>
+						{isTodayLesson && !isCancelled && (
+							<span className="badge badge-primary badge-xs">Today</span>
+						)}
+					</div>
+					<div className="flex items-center gap-2 flex-wrap">
+						<span className={`badge badge-sm font-semibold ${
+							isCancelled 
+								? 'badge-ghost' 
+								: lesson.lessonType === 'group' 
+									? 'badge-secondary' 
+									: lesson.lessonType === 'couple'
+										? 'badge-accent'
+										: 'badge-primary'
+						}`}>
+							{LESSON_TYPE_LABELS[lesson.lessonType]}
+						</span>
+						{isCancelled && (
+							<span className="badge badge-error badge-sm">Cancelled</span>
+						)}
+						{lesson.durationMinutes && (
+							<span className="text-xs text-base-content/50">
+								{lesson.durationMinutes} min
+							</span>
+						)}
+					</div>
+				</div>
 			</div>
 
 			{/* Details */}
 			{!compact && (
-				<div className="mt-2 space-y-1 text-xs text-base-content/70">
+				<div className="mt-3 space-y-2 text-sm">
 					{lesson.teacherName && (
-						<div className="flex items-center gap-1">
-							<User className="h-3 w-3" />
+						<div className="flex items-center gap-2 text-base-content/80">
+							<div className="p-1 rounded bg-base-200/50">
+								<User className="h-3.5 w-3.5" />
+							</div>
+							<span className="font-medium">{lesson.teacherName}</span>
+						</div>
+					)}
+					{lesson.roomLabel && (
+						<div className="flex items-center gap-2 text-base-content/80">
+							<div className="p-1 rounded bg-base-200/50">
+								<MapPin className="h-3.5 w-3.5" />
+							</div>
+							<span>{lesson.roomLabel}</span>
+						</div>
+					)}
+					{lesson.pairLabel && (
+						<div className="flex items-center gap-2 text-base-content/80">
+							<div className="p-1 rounded bg-base-200/50">
+								<Users className="h-3.5 w-3.5" />
+							</div>
+							<span>{lesson.pairLabel}</span>
+						</div>
+					)}
+					{lesson.notes && (
+						<div className="mt-2 p-2 bg-base-200/30 rounded-lg text-xs text-base-content/70 italic">
+							{lesson.notes}
+						</div>
+					)}
+				</div>
+			)}
+
+			{/* Compact view details */}
+			{compact && (
+				<div className="mt-2 space-y-1">
+					{lesson.teacherName && (
+						<div className="text-xs text-base-content/70 truncate">
+							<User className="h-3 w-3 inline mr-1" />
 							{lesson.teacherName}
 						</div>
 					)}
 					{lesson.roomLabel && (
-						<div className="flex items-center gap-1">
-							<MapPin className="h-3 w-3" />
+						<div className="text-xs text-base-content/70 truncate">
+							<MapPin className="h-3 w-3 inline mr-1" />
 							{lesson.roomLabel}
-						</div>
-					)}
-					{lesson.pairLabel && (
-						<div className="flex items-center gap-1">
-							<Users className="h-3 w-3" />
-							{lesson.pairLabel}
 						</div>
 					)}
 				</div>
@@ -484,22 +562,24 @@ function LessonCard({
 
 			{/* Cancel Reason (if cancelled) */}
 			{isCancelled && lesson.cancellation?.reason && (
-				<div className="mt-2 text-xs text-error/80 bg-error/10 rounded p-1.5">
-					<strong>Reason:</strong> {lesson.cancellation.reason}
+				<div className="mt-3 p-2 bg-error/10 border border-error/20 rounded-lg">
+					<p className="text-xs font-semibold text-error mb-1">Cancellation Reason:</p>
+					<p className="text-xs text-base-content/70">{lesson.cancellation.reason}</p>
 				</div>
 			)}
 
 			{/* Cancel Button */}
 			{!isCancelled && !isPast && (
-				<div className="mt-2">
+				<div className="mt-3 pt-2 border-t border-base-300/50">
 					<button
 						onClick={(e) => {
 							e.stopPropagation()
 							onCancel()
 						}}
-						className="btn btn-ghost btn-xs text-error hover:bg-error/10 w-full"
+						className="btn btn-outline btn-error btn-sm w-full text-xs"
 					>
-						Cancel
+						<X className="h-3.5 w-3.5 mr-1" />
+						Cancel Lesson
 					</button>
 				</div>
 			)}
