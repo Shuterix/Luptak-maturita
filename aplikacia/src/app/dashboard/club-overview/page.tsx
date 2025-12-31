@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { Users, GraduationCap, UserCheck, Mail, Phone, Heart, Key, RefreshCw, Copy, Check } from 'lucide-react'
+import { Users, GraduationCap, UserCheck, Mail, Phone, Heart, Key, RefreshCw, Copy, Check, UsersRound } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { showAlertToast } from '@/components/toast/Toast'
 
@@ -30,6 +30,7 @@ export default function ClubOverviewPage() {
 	const [students, setStudents] = useState<UserData[]>([])
 	const [trainers, setTrainers] = useState<UserData[]>([])
 	const [club, setClub] = useState<ClubData | null>(null)
+	const [groups, setGroups] = useState<string[]>([])
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
 	const [regenerating, setRegenerating] = useState(false)
@@ -77,6 +78,13 @@ export default function ClubOverviewPage() {
 				setTrainers(trainersData.users || [])
 			} else {
 				throw new Error('Failed to fetch trainers')
+			}
+
+			// Fetch groups
+			const groupsRes = await fetch('/api/groups', { cache: 'no-store' })
+			if (groupsRes.ok) {
+				const groupsData = await groupsRes.json()
+				setGroups(groupsData.groups || [])
 			}
 		} catch (err: any) {
 			console.error('Error fetching club members:', err)
@@ -247,7 +255,7 @@ export default function ClubOverviewPage() {
 			</header>
 
 			{/* Stats Cards */}
-			<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 				<div className="card bg-base-100 shadow-md border border-base-300">
 					<div className="card-body p-4 sm:p-6">
 						<div className="flex items-center gap-3">
@@ -287,6 +295,19 @@ export default function ClubOverviewPage() {
 						</div>
 					</div>
 				</div>
+				<div className="card bg-base-100 shadow-md border border-base-300">
+					<div className="card-body p-4 sm:p-6">
+						<div className="flex items-center gap-3">
+							<div className="p-3 bg-info/20 rounded-lg">
+								<UsersRound className="h-6 w-6 text-info" />
+							</div>
+							<div>
+								<p className="text-sm text-base-content/60">Groups</p>
+								<p className="text-2xl font-bold">{groups.length}</p>
+							</div>
+						</div>
+					</div>
+				</div>
 			</div>
 
 			{/* Trainers Section */}
@@ -306,6 +327,37 @@ export default function ClubOverviewPage() {
 					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 						{trainers.map((trainer) => (
 							<UserCard key={trainer._id} userData={trainer} />
+						))}
+					</div>
+				)}
+			</section>
+
+			{/* Groups Section */}
+			<section>
+				<div className="flex items-center gap-2 mb-4">
+					<UsersRound className="h-5 w-5 text-info" />
+					<h2 className="text-xl font-semibold">Groups</h2>
+					<span className="badge badge-outline">{groups.length}</span>
+				</div>
+				{groups.length === 0 ? (
+					<div className="card bg-base-100 border border-base-300">
+						<div className="card-body text-center py-8">
+							<p className="text-base-content/60">No groups found. Create groups when assigning couples.</p>
+						</div>
+					</div>
+				) : (
+					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+						{groups.map((group) => (
+							<div key={group} className="card bg-base-100 shadow-md border border-base-300 hover:shadow-lg transition-shadow">
+								<div className="card-body p-4">
+									<div className="flex items-center gap-2">
+										<div className="p-2 bg-info/20 rounded-lg">
+											<UsersRound className="h-5 w-5 text-info" />
+										</div>
+										<h3 className="font-semibold text-base">{group}</h3>
+									</div>
+								</div>
+							</div>
 						))}
 					</div>
 				)}

@@ -156,6 +156,8 @@ export default function CouplesPage() {
 
 	const handleOpenModal = (pair?: Pair) => {
 		setError(null) // Clear any previous errors
+		setShowNewGroupInput(false)
+		setNewGroupName('')
 		if (pair) {
 			setEditingPair(pair)
 			setFormData({
