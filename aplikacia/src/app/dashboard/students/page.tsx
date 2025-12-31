@@ -53,11 +53,11 @@ const LESSON_TYPE_LABELS = {
 	couple: 'Couple',
 }
 
-// Helper function to format time from ISO string
+// Helper function to format time from ISO string (24-hour format)
 const formatTime = (isoString: string): string => {
 	try {
 		const date = parseISO(isoString)
-		return format(date, 'h:mm a')
+		return format(date, 'HH:mm')
 	} catch {
 		return isoString
 	}
