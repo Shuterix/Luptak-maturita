@@ -55,11 +55,34 @@ export async function GET(request: NextRequest) {
 			if (!timetable.lessons) continue
 
 			for (const lesson of timetable.lessons) {
+				// Helper function to check if a name matches (handles both individual names and couple names)
+				const nameMatches = (nameToCheck: string, targetName: string): boolean => {
+					// Direct match
+					if (nameToCheck === targetName) return true
+					// Check if it's a couple name (contains " & ") and split it
+					if (nameToCheck.includes(' & ')) {
+						const individualNames = nameToCheck.split(' & ').map(n => n.trim())
+						return individualNames.includes(targetName)
+					}
+					return false
+				}
+
 				// Check if student is in this lesson
-				const isParticipant =
-					(lesson.studentName && lesson.studentName === studentName) ||
-					(lesson.studentNames && lesson.studentNames.includes(studentName)) ||
-					(lesson.pairLabel && lesson.pairLabel.includes(studentName))
+				// Handle both old format (couple name in studentNames) and new format (individual names)
+				let isParticipant = false
+				
+				if (lesson.studentName) {
+					isParticipant = nameMatches(lesson.studentName, studentName)
+				}
+				
+				if (!isParticipant && lesson.studentNames && Array.isArray(lesson.studentNames)) {
+					// Check each name in the array (could be individual names or couple names)
+					isParticipant = lesson.studentNames.some(name => nameMatches(name, studentName))
+				}
+				
+				if (!isParticipant && lesson.pairLabel) {
+					isParticipant = nameMatches(lesson.pairLabel, studentName)
+				}
 
 				if (isParticipant && lesson.kind === 'lesson') {
 					studentLessons.push({
