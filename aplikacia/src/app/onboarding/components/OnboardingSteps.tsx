@@ -82,6 +82,11 @@ export default function OnboardingSteps() {
 	const [isStepValid, setIsStepValid] = useState(false)
 	const [newUserData, setNewUserData] = useState<Partial<User>>({})
 
+	// Calculate filtered steps based on current user data
+	const filteredSteps = stepDefinitions.filter(
+		(def) => def.key === 'role' || !def.condition || def.condition(newUserData)
+	)
+
 	useEffect(() => {
 		if (initialized && userData && Object.keys(userData).length > 0) {
 			const updated = { ...userData, createNewClub: null }
@@ -107,7 +112,18 @@ export default function OnboardingSteps() {
 		}
 		window.addEventListener('beforeunload', handleUnload)
 		return () => window.removeEventListener('beforeunload', handleUnload)
-	}, [newUserData])
+	}, [newUserData, saveUserDataToDB])
+
+	// Reset step if current step is invalid after role change
+	// This hook must be called before any conditional returns
+	useEffect(() => {
+		if (newUserData.role && filteredSteps.length > 0) {
+			const validStepIndex = Math.min(step, filteredSteps.length - 1)
+			if (validStepIndex !== step && filteredSteps[validStepIndex]) {
+				setStep(validStepIndex)
+			}
+		}
+	}, [newUserData.role, filteredSteps.length, step, setStep, filteredSteps])
 
 	// Show loading only if truly needed
 	if (!initialized || !userData) {
@@ -127,27 +143,12 @@ export default function OnboardingSteps() {
 		)
 	}
 
-	const filteredSteps = stepDefinitions.filter(
-		(def) => def.key === 'role' || !def.condition || def.condition(newUserData)
-	)
-
 	const progressBarSteps = stepDefinitions.filter(
 		(def) => def.key === 'role' || !def.condition || def.condition(newUserData)
 	)
 
 	const totalSteps = newUserData.role ? progressBarSteps.length : 2
 	const currentStep = newUserData.role ? filteredSteps[step] : step === 0 ? filteredSteps[0] : filteredSteps[1]
-
-	// Reset step if current step is invalid after role change
-	useEffect(() => {
-		if (newUserData.role && filteredSteps.length > 0) {
-			const validStepIndex = Math.min(step, filteredSteps.length - 1)
-			if (validStepIndex !== step && filteredSteps[validStepIndex]) {
-				setStep(validStepIndex)
-			}
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [newUserData.role, filteredSteps.length])
 
 	if(!currentStep) {
 		return (
