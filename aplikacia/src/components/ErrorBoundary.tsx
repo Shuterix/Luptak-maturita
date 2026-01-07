@@ -33,9 +33,9 @@ export class ErrorBoundary extends Component<Props, State> {
 					<div className="min-h-screen flex items-center justify-center bg-base-100 p-4">
 						<div className="card bg-base-200 shadow-xl max-w-md w-full">
 							<div className="card-body">
-								<h2 className="card-title text-error">Chyba aplikácie</h2>
-								<p className="text-sm">
-									Došlo k neočakávanej chybe. Skúste obnoviť stránku alebo sa prihlásiť znova.
+								<h2 className="card-title text-error">Something went wrong</h2>
+								<p className="text-sm text-base-content/70">
+									An unexpected error occurred. Please refresh the page or try signing in again.
 								</p>
 								<div className="card-actions justify-end mt-4">
 									<button
@@ -45,7 +45,7 @@ export class ErrorBoundary extends Component<Props, State> {
 											window.location.reload()
 										}}
 									>
-										Obnoviť stránku
+										Refresh page
 									</button>
 								</div>
 							</div>

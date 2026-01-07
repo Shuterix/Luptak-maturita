@@ -26,12 +26,12 @@ export default function LoginForm() {
 
 	useEffect(() => {
 		if (passwordRef.current) {
-			// Reduce interventions from password managers on problematic devices
-			passwordRef.current.setAttribute('autocomplete', 'new-password')
-			passwordRef.current.setAttribute('name', 'new-password')
+			// Disable third-party password managers to avoid "compromised password" warnings
+			passwordRef.current.setAttribute('data-form-type', 'other')
 			passwordRef.current.setAttribute('data-1p-ignore', 'true')
 			passwordRef.current.setAttribute('data-lpignore', 'true')
 			passwordRef.current.setAttribute('data-bwignore', 'true')
+			passwordRef.current.setAttribute('data-protonpass-ignore', 'true')
 		}
 	}, [])
 
@@ -41,7 +41,7 @@ export default function LoginForm() {
 	}
 
 	return (
-		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4" autoComplete="off" noValidate>
+		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4" autoComplete="off" data-form-type="other" noValidate>
 			<div className="form-control">
 				<label className="label">
 					<span className="label-text text-sm">Email</span>
@@ -79,6 +79,7 @@ export default function LoginForm() {
 					className="input input-bordered"
 					inputMode="text"
 					autoCapitalize="none"
+					autoComplete="current-password"
 					spellCheck={false}
 					maxLength={128}
 					{...passwordRegister}
@@ -103,7 +104,7 @@ export default function LoginForm() {
 					{isLoading ? (
 						<span className="loading loading-spinner"></span>
 					) : (
-						'Login'
+						'Sign in'
 					)}
 				</button>
 			</div>

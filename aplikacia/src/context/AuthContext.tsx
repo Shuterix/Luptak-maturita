@@ -61,12 +61,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 					// Silent fail - keep cached user if refresh fails
 				})
 			} catch {
-				refreshUser()
+				// Invalid stored user, try to refresh
+				refreshUser().catch(() => {
+					// Silent fail - user is not logged in
+				})
 			}
-		} else {
-			// Only fetch if no cached user exists
-			refreshUser()
 		}
+		// Don't call refreshUser if no stored user - they're not logged in
 	}, [])
 
 	const login = async (email: string, password: string) => {
@@ -117,19 +118,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 			setUser(null)
 			localStorage.removeItem('dancehub_USER')
 			
-			// Prefetch login page
-			router.prefetch('/auth/login')
-			
-			// Use replace to avoid adding to history
-			router.replace('/auth/login')
-			
-			// Logout in background (non-blocking)
+			// Logout API call (non-blocking)
 			axios.get('/api/auth/logout').catch(console.error)
 			
-			// Show toast after navigation starts
-			setTimeout(() => {
-				showAlertToast('Logged out successfully', { variant: 'success', title: 'Success' })
-			}, 100)
+			// Use window.location for production compatibility (Netlify)
+			// router.replace doesn't always work on production builds
+			if (typeof window !== 'undefined') {
+				window.location.href = '/auth/login'
+			}
 		} catch (err) {
 			console.error(err)
 			showAlertToast('Logout failed', { variant: 'error', title: 'Error' })

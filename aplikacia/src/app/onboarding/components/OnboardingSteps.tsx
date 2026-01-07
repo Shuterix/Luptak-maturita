@@ -153,12 +153,12 @@ export default function OnboardingSteps() {
 		return (
 			<div className="min-h-screen flex items-center justify-center">
 				<div className="text-center">
-					<p className="text-error mb-4">Chyba pri načítaní kroku. Skúste obnoviť stránku.</p>
+					<p className="text-error mb-4">Something went wrong. Please refresh the page.</p>
 					<button 
 						onClick={() => window.location.reload()} 
 						className="btn btn-primary"
 					>
-						Obnoviť stránku
+						Refresh
 					</button>
 				</div>
 			</div>

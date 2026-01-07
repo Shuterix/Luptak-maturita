@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { Menu, Bell, X } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 
 const getPageTitle = (pathname: string, userRole?: string): string => {
@@ -51,7 +51,6 @@ const getPageTitle = (pathname: string, userRole?: string): string => {
 export default function NavbarMobile() {
 	const [drawerOpen, setDrawerOpen] = useState(false)
 	const pathname = usePathname()
-	const router = useRouter()
 	const { user } = useAuth()
 	
 	// Compute page title from pathname - this will automatically update when pathname changes
@@ -86,18 +85,6 @@ export default function NavbarMobile() {
 		}
 	}, [])
 
-	const toggleDrawer = () => {
-		if (typeof window === 'undefined') return
-		
-		const drawer = document.getElementById('my-drawer') as HTMLInputElement
-		if (drawer) {
-			drawer.checked = !drawer.checked
-			setDrawerOpen(drawer.checked)
-			drawer.dispatchEvent(new Event('change', { bubbles: true }))
-			drawer.dispatchEvent(new Event('input', { bubbles: true }))
-		}
-	}
-
 	const closeDrawer = () => {
 		if (typeof window === 'undefined') return
 		
@@ -130,11 +117,6 @@ export default function NavbarMobile() {
 				>
 					{pageTitle}
 				</Link>
-			</div>
-			<div className="flex-none">
-				<button className="btn btn-square btn-ghost">
-					<Bell className="h-5 w-5" />
-				</button>
 			</div>
 		</header>
 	)

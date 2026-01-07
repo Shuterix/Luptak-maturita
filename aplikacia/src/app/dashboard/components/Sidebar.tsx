@@ -85,7 +85,7 @@ export default function Sidebar() {
 			icon: <Settings className="h-5 w-5" />,
 		},
 		{
-			name: 'Logout',
+			name: 'Sign out',
 			icon: <LogOut className="h-5 w-5" />,
 			isAction: true,
 		},
@@ -118,7 +118,7 @@ export default function Sidebar() {
 						onClick={closeDrawer}
 						onMouseEnter={() => router.prefetch('/dashboard')}
 					>
-						Project V1
+						DanceHub
 					</Link>
 				</div>
 

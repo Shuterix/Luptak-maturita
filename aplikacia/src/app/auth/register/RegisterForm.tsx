@@ -44,20 +44,17 @@ export default function RegisterForm() {
 	})
 
 	useEffect(() => {
-		if (passwordRef.current) {
-			passwordRef.current.setAttribute('autocomplete', 'new-password')
-			passwordRef.current.setAttribute('name', 'new-password')
-			passwordRef.current.setAttribute('data-1p-ignore', 'true')
-			passwordRef.current.setAttribute('data-lpignore', 'true')
-			passwordRef.current.setAttribute('data-bwignore', 'true')
+		const disablePasswordManager = (el: HTMLInputElement | null) => {
+			if (!el) return
+			// Disable third-party password managers to avoid "compromised password" warnings
+			el.setAttribute('data-form-type', 'other')
+			el.setAttribute('data-1p-ignore', 'true')
+			el.setAttribute('data-lpignore', 'true')
+			el.setAttribute('data-bwignore', 'true')
+			el.setAttribute('data-protonpass-ignore', 'true')
 		}
-		if (confirmPasswordRef.current) {
-			confirmPasswordRef.current.setAttribute('autocomplete', 'new-password')
-			confirmPasswordRef.current.setAttribute('name', 'new-password')
-			confirmPasswordRef.current.setAttribute('data-1p-ignore', 'true')
-			confirmPasswordRef.current.setAttribute('data-lpignore', 'true')
-			confirmPasswordRef.current.setAttribute('data-bwignore', 'true')
-		}
+		disablePasswordManager(passwordRef.current)
+		disablePasswordManager(confirmPasswordRef.current)
 	}, [])
 
 	const onSubmit = async (credentials: RegisterFormInputs) => {
@@ -93,7 +90,7 @@ export default function RegisterForm() {
 	}
 
 	return (
-		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4" autoComplete="off" noValidate>
+		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4" autoComplete="off" data-form-type="other" noValidate>
 			<div className="flex gap-2">
 				<div className="form-control">
 					<label className="label">
@@ -174,6 +171,7 @@ export default function RegisterForm() {
 					className="input input-bordered"
 					inputMode="text"
 					autoCapitalize="none"
+					autoComplete="new-password"
 					spellCheck={false}
 					maxLength={128}
 					{...passwordRegister}
@@ -198,6 +196,7 @@ export default function RegisterForm() {
 					className="input input-bordered"
 					inputMode="text"
 					autoCapitalize="none"
+					autoComplete="new-password"
 					spellCheck={false}
 					maxLength={128}
 					{...confirmPasswordRegister}
@@ -218,7 +217,11 @@ export default function RegisterForm() {
 			</div>
 			<div className="form-control">
 				<button type="submit" className="btn btn-primary w-full" disabled={isSubmitting}>
-					Register
+					{isSubmitting ? (
+						<span className="loading loading-spinner"></span>
+					) : (
+						'Create account'
+					)}
 				</button>
 			</div>
 		</form>
