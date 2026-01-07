@@ -25,12 +25,21 @@ interface ClubData {
 	code?: string // Only available for trainers
 }
 
+interface GroupData {
+	_id: string
+	name: string
+	description?: string
+	coupleCount?: number
+	createdAt?: string
+	updatedAt?: string
+}
+
 export default function ClubOverviewPage() {
 	const { user } = useAuth()
 	const [students, setStudents] = useState<UserData[]>([])
 	const [trainers, setTrainers] = useState<UserData[]>([])
 	const [club, setClub] = useState<ClubData | null>(null)
-	const [groups, setGroups] = useState<string[]>([])
+	const [groups, setGroups] = useState<GroupData[]>([])
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
 	const [regenerating, setRegenerating] = useState(false)
@@ -50,41 +59,47 @@ export default function ClubOverviewPage() {
 
 			if (!user?.clubId) {
 				setError('You are not assigned to a club.')
+				setLoading(false)
 				return
 			}
 
-			// Fetch club info
-			const clubRes = await fetch(`/api/clubs/${user.clubId}`, { cache: 'no-store' })
-			if (clubRes.ok) {
-				const clubData = await clubRes.json()
+			// Fetch all data in parallel for faster loading
+			const [clubRes, studentsRes, trainersRes, groupsRes] = await Promise.all([
+				fetch(`/api/clubs/${user.clubId}`, { cache: 'no-store' }),
+				fetch(`/api/users?clubId=${user.clubId}&role=student`, { cache: 'no-store' }),
+				fetch(`/api/users?clubId=${user.clubId}&role=trainer`, { cache: 'no-store' }),
+				fetch('/api/groups', { cache: 'no-store' }),
+			])
+
+			// Process responses in parallel
+			const [clubData, studentsData, trainersData, groupsData] = await Promise.all([
+				clubRes.ok ? clubRes.json() : null,
+				studentsRes.ok ? studentsRes.json() : null,
+				trainersRes.ok ? trainersRes.json() : null,
+				groupsRes.ok ? groupsRes.json() : null,
+			])
+
+			// Update state with results
+			if (clubData?.club) {
 				setClub(clubData.club)
-			} else {
+			} else if (!clubRes.ok) {
 				throw new Error('Failed to fetch club information')
 			}
 
-			// Fetch students
-			const studentsRes = await fetch(`/api/users?clubId=${user.clubId}&role=student`, { cache: 'no-store' })
-			if (studentsRes.ok) {
-				const studentsData = await studentsRes.json()
-				setStudents(studentsData.users || [])
-			} else {
+			if (studentsData?.users) {
+				setStudents(studentsData.users)
+			} else if (!studentsRes.ok) {
 				throw new Error('Failed to fetch students')
 			}
 
-			// Fetch trainers
-			const trainersRes = await fetch(`/api/users?clubId=${user.clubId}&role=trainer`, { cache: 'no-store' })
-			if (trainersRes.ok) {
-				const trainersData = await trainersRes.json()
-				setTrainers(trainersData.users || [])
-			} else {
+			if (trainersData?.users) {
+				setTrainers(trainersData.users)
+			} else if (!trainersRes.ok) {
 				throw new Error('Failed to fetch trainers')
 			}
 
-			// Fetch groups
-			const groupsRes = await fetch('/api/groups', { cache: 'no-store' })
-			if (groupsRes.ok) {
-				const groupsData = await groupsRes.json()
-				setGroups(groupsData.groups || [])
+			if (groupsData?.groups) {
+				setGroups(groupsData.groups)
 			}
 		} catch (err: any) {
 			console.error('Error fetching club members:', err)
@@ -348,13 +363,23 @@ export default function ClubOverviewPage() {
 				) : (
 					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 						{groups.map((group) => (
-							<div key={group} className="card bg-base-100 shadow-md border border-base-300 hover:shadow-lg transition-shadow">
+							<div key={group._id} className="card bg-base-100 shadow-md border border-base-300 hover:shadow-lg transition-shadow">
 								<div className="card-body p-4">
 									<div className="flex items-center gap-2">
 										<div className="p-2 bg-info/20 rounded-lg">
 											<UsersRound className="h-5 w-5 text-info" />
 										</div>
-										<h3 className="font-semibold text-base">{group}</h3>
+										<div className="flex-1 min-w-0">
+											<h3 className="font-semibold text-base truncate">{group.name}</h3>
+											{group.description && (
+												<p className="text-sm text-base-content/60 truncate mt-1">{group.description}</p>
+											)}
+											{typeof group.coupleCount === 'number' && (
+												<p className="text-xs text-base-content/50 mt-1">
+													{group.coupleCount} {group.coupleCount === 1 ? 'couple' : 'couples'}
+												</p>
+											)}
+										</div>
 									</div>
 								</div>
 							</div>

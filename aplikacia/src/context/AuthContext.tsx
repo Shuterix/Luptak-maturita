@@ -56,9 +56,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 			try {
 				const parsed = JSON.parse(storedUser)
 				setUser(parsed)
+				// Refresh user in background to ensure data is up to date
+				refreshUser().catch(() => {
+					// Silent fail - keep cached user if refresh fails
+				})
 			} catch {
 				refreshUser()
 			}
+		} else {
+			// Only fetch if no cached user exists
+			refreshUser()
 		}
 	}, [])
 
@@ -76,19 +83,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 				}
 				setUser(normalizedUser)
 				localStorage.setItem('dancehub_USER', JSON.stringify(normalizedUser))
-				showAlertToast('Login successful!', { variant: 'success', title: 'Success' })
-
+				
 				// Check if onboarding is complete based on role
 				// Trainers: onboardingStep >= 2, Students: onboardingStep >= 1
 				const onboardingComplete = data.user.role === 'trainer' 
 					? (data.user.onboardingStep ?? 0) >= 2 
 					: (data.user.onboardingStep ?? 0) >= 1
 				
-				if (onboardingComplete) {
-					router.push('/dashboard')
-				} else {
-					router.push('/onboarding')
-				}
+				// Prefetch destination route before redirect
+				const destination = onboardingComplete ? '/dashboard' : '/onboarding'
+				router.prefetch(destination)
+				
+				// Use replace instead of push to avoid adding to history
+				router.replace(destination)
+				
+				// Show toast after navigation starts (non-blocking)
+				setTimeout(() => {
+					showAlertToast('Login successful!', { variant: 'success', title: 'Success' })
+				}, 100)
 			}
 		} catch (err: any) {
 			const message = err.response?.data?.message || 'Unexpected login error'
@@ -101,11 +113,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 	const logout = async () => {
 		try {
-			await axios.get('/api/auth/logout')
+			// Clear state immediately for faster UI response
 			setUser(null)
 			localStorage.removeItem('dancehub_USER')
-			router.push('/auth/login')
-			showAlertToast('Logged out successfully', { variant: 'success', title: 'Success' })
+			
+			// Prefetch login page
+			router.prefetch('/auth/login')
+			
+			// Use replace to avoid adding to history
+			router.replace('/auth/login')
+			
+			// Logout in background (non-blocking)
+			axios.get('/api/auth/logout').catch(console.error)
+			
+			// Show toast after navigation starts
+			setTimeout(() => {
+				showAlertToast('Logged out successfully', { variant: 'success', title: 'Success' })
+			}, 100)
 		} catch (err) {
 			console.error(err)
 			showAlertToast('Logout failed', { variant: 'error', title: 'Error' })

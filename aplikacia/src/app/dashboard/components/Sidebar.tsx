@@ -12,6 +12,7 @@ import {
 	Calendar,
 	Building2,
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { ActionButton } from './ActionButton'
 import { LogoutButton } from './LogoutButton'
 import { useAuth } from '@/context/AuthContext'
@@ -26,6 +27,7 @@ interface NavItem {
 
 export default function Sidebar() {
 	const { user } = useAuth()
+	const router = useRouter()
 
 	const mainNavItems: NavItem[] = [
 		{
@@ -89,6 +91,17 @@ export default function Sidebar() {
 		},
 	]
 
+	const closeDrawer = () => {
+		if (typeof window === 'undefined') return
+		
+		const drawer = document.getElementById('my-drawer') as HTMLInputElement
+		if (drawer) {
+			drawer.checked = false
+			drawer.dispatchEvent(new Event('change', { bubbles: true }))
+			drawer.dispatchEvent(new Event('input', { bubbles: true }))
+		}
+	}
+
 	return (
 		<aside className="drawer-side">
 			<label
@@ -99,7 +112,12 @@ export default function Sidebar() {
 			<div className="menu p-4 w-80 h-full bg-base-100 text-base-content">
 				<div className="mb-4 p-4 flex items-center space-x-2">
 					<Shield className="h-6 w-6 text-primary" />
-					<Link href="/dashboard" className="text-xl font-bold">
+					<Link 
+						href="/dashboard" 
+						className="text-xl font-bold" 
+						onClick={closeDrawer}
+						onMouseEnter={() => router.prefetch('/dashboard')}
+					>
 						Project V1
 					</Link>
 				</div>

@@ -18,7 +18,7 @@ export default function StepTrainerChoice({ onValidityChange, onDataChange }: St
 
 	useEffect(() => {
 		onValidityChange(createNewClub !== null)
-	}, [createNewClub])
+	}, [createNewClub, onValidityChange])
 
 	return (
 		<div className="space-y-6">

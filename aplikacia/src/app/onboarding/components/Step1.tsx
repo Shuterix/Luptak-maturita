@@ -19,7 +19,7 @@ export default function Step1({ onValidityChange, onDataChange, userData }: Step
 	
 	useEffect(() => {
 		onValidityChange(!!selectedRole)
-	}, [selectedRole])
+	}, [selectedRole, onValidityChange])
 
 	useEffect(() => {
 		if(!userData) return

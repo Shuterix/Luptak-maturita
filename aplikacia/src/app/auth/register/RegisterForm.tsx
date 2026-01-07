@@ -64,12 +64,19 @@ export default function RegisterForm() {
 		try {
 			const response = await axios.post('/api/auth/register', credentials)
 
-			router.push('/auth/login')
+			// Prefetch login page
+			router.prefetch('/auth/login')
+			
+			// Use replace to avoid adding to history
+			router.replace('/auth/login')
 
-			showAlertToast(response.data.message, {
-				variant: 'success',
-				title: 'Success',
-			})
+			// Show toast after navigation starts
+			setTimeout(() => {
+				showAlertToast(response.data.message, {
+					variant: 'success',
+					title: 'Success',
+				})
+			}, 100)
 		} catch (error: unknown) {
 			console.error(error)
 

@@ -95,7 +95,8 @@ export default function OnboardingSteps() {
 				: onboardingStep >= 1
 			
 			if (onboardingComplete) {
-				router.push('/dashboard')
+				router.prefetch('/dashboard')
+				router.replace('/dashboard')
 			}
 		}
 	}, [initialized, userData, router])
@@ -108,7 +109,17 @@ export default function OnboardingSteps() {
 		return () => window.removeEventListener('beforeunload', handleUnload)
 	}, [newUserData])
 
-	if (!initialized || !userData || isLoading || Object.keys(newUserData).length === 0) {
+	// Show loading only if truly needed
+	if (!initialized || !userData) {
+		return (
+			<div className="min-h-screen flex items-center justify-center">
+				<span className="loading loading-spinner text-primary"></span>
+			</div>
+		)
+	}
+
+	// Don't block on isLoading from LoadingContext - it's for async operations
+	if (Object.keys(newUserData).length === 0) {
 		return (
 			<div className="min-h-screen flex items-center justify-center">
 				<span className="loading loading-spinner text-primary"></span>
@@ -127,7 +138,32 @@ export default function OnboardingSteps() {
 	const totalSteps = newUserData.role ? progressBarSteps.length : 2
 	const currentStep = newUserData.role ? filteredSteps[step] : step === 0 ? filteredSteps[0] : filteredSteps[1]
 
-	if(!currentStep) return null
+	// Reset step if current step is invalid after role change
+	useEffect(() => {
+		if (newUserData.role && filteredSteps.length > 0) {
+			const validStepIndex = Math.min(step, filteredSteps.length - 1)
+			if (validStepIndex !== step && filteredSteps[validStepIndex]) {
+				setStep(validStepIndex)
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [newUserData.role, filteredSteps.length])
+
+	if(!currentStep) {
+		return (
+			<div className="min-h-screen flex items-center justify-center">
+				<div className="text-center">
+					<p className="text-error mb-4">Chyba pri načítaní kroku. Skúste obnoviť stránku.</p>
+					<button 
+						onClick={() => window.location.reload()} 
+						className="btn btn-primary"
+					>
+						Obnoviť stránku
+					</button>
+				</div>
+			</div>
+		)
+	}
 
 	const StepComponent = currentStep.component
 	const progress = ((step + 1) / totalSteps) * 100
@@ -203,11 +239,19 @@ export default function OnboardingSteps() {
 				}
 			}
 
-			showAlertToast('Onboarding completed!', {
-				variant: 'success',
-				title: 'Success',
-			})
-			router.push('/dashboard')
+			// Prefetch dashboard before redirect
+			router.prefetch('/dashboard')
+			
+			// Use replace to avoid adding to history
+			router.replace('/dashboard')
+			
+			// Show toast after navigation starts (non-blocking)
+			setTimeout(() => {
+				showAlertToast('Onboarding completed!', {
+					variant: 'success',
+					title: 'Success',
+				})
+			}, 100)
 		} catch (error) {
 			console.error('Failed to finish onboarding', error)
 			showAlertToast('Something went wrong. Try again.', {
