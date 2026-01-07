@@ -5,6 +5,7 @@ import axios from 'axios'
 import { isAxiosError } from 'axios'
 import { showAlertToast } from '@/components/toast/Toast'
 import { useRouter } from 'next/navigation'
+import { useEffect, useRef } from 'react'
 
 interface RegisterFormInputs {
 	firstName: string
@@ -19,10 +20,45 @@ export default function RegisterForm() {
 		register,
 		handleSubmit,
 		watch,
-		formState: { errors },
+		formState: { errors, isSubmitting },
 	} = useForm<RegisterFormInputs>()
 
 	const router = useRouter()
+	const passwordRef = useRef<HTMLInputElement | null>(null)
+	const confirmPasswordRef = useRef<HTMLInputElement | null>(null)
+
+	const passwordRegister = register('password', {
+		required: 'Password is required',
+		minLength: {
+			value: 6,
+			message: 'Password must be at least 6 characters',
+		},
+		validate: (value) => (!/\s/.test(value) ? true : 'Password cannot contain spaces'),
+	})
+
+	const confirmPasswordRegister = register('confirmedPassword', {
+		required: 'Please confirm your password',
+		validate: (value) =>
+			value === watch('password') ||
+			'Passwords do not match',
+	})
+
+	useEffect(() => {
+		if (passwordRef.current) {
+			passwordRef.current.setAttribute('autocomplete', 'new-password')
+			passwordRef.current.setAttribute('name', 'new-password')
+			passwordRef.current.setAttribute('data-1p-ignore', 'true')
+			passwordRef.current.setAttribute('data-lpignore', 'true')
+			passwordRef.current.setAttribute('data-bwignore', 'true')
+		}
+		if (confirmPasswordRef.current) {
+			confirmPasswordRef.current.setAttribute('autocomplete', 'new-password')
+			confirmPasswordRef.current.setAttribute('name', 'new-password')
+			confirmPasswordRef.current.setAttribute('data-1p-ignore', 'true')
+			confirmPasswordRef.current.setAttribute('data-lpignore', 'true')
+			confirmPasswordRef.current.setAttribute('data-bwignore', 'true')
+		}
+	}, [])
 
 	const onSubmit = async (credentials: RegisterFormInputs) => {
 		try {
@@ -50,7 +86,7 @@ export default function RegisterForm() {
 	}
 
 	return (
-		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4" autoComplete="off" noValidate>
 			<div className="flex gap-2">
 				<div className="form-control">
 					<label className="label">
@@ -62,7 +98,10 @@ export default function RegisterForm() {
 						className="input input-bordered"
 						{...register('firstName', {
 							required: 'First name is required',
+							maxLength: { value: 64, message: 'First name is too long' },
 						})}
+						autoCapitalize="words"
+						spellCheck={false}
 					/>
 					{errors.firstName && (
 						<p className="text-error text-sm mt-1">
@@ -80,7 +119,10 @@ export default function RegisterForm() {
 						className="input input-bordered"
 						{...register('lastName', {
 							required: 'Last name is required',
+							maxLength: { value: 64, message: 'Last name is too long' },
 						})}
+						autoCapitalize="words"
+						spellCheck={false}
 					/>
 					{errors.lastName && (
 						<p className="text-error text-sm mt-1">
@@ -97,6 +139,10 @@ export default function RegisterForm() {
 					type="email"
 					placeholder="email@example.com"
 					className="input input-bordered"
+					inputMode="email"
+					autoCapitalize="none"
+					spellCheck={false}
+					maxLength={254}
 					{...register('email', {
 						required: 'Email is required',
 						pattern: {
@@ -119,13 +165,15 @@ export default function RegisterForm() {
 					type="password"
 					placeholder="••••••••"
 					className="input input-bordered"
-					{...register('password', {
-						required: 'Password is required',
-						minLength: {
-							value: 6,
-							message: 'Password must be at least 6 characters',
-						},
-					})}
+					inputMode="text"
+					autoCapitalize="none"
+					spellCheck={false}
+					maxLength={128}
+					{...passwordRegister}
+					ref={(e) => {
+						passwordRegister.ref(e)
+						passwordRef.current = e
+					}}
 				/>
 				{errors.password && (
 					<p className="text-error text-sm mt-1">
@@ -141,12 +189,19 @@ export default function RegisterForm() {
 					type="password"
 					placeholder="••••••••"
 					className="input input-bordered"
-					{...register('confirmedPassword', {
-						required: 'Please confirm your password',
-						validate: (value) =>
-							value === watch('password') ||
-							'Passwords do not match',
-					})}
+					inputMode="text"
+					autoCapitalize="none"
+					spellCheck={false}
+					maxLength={128}
+					{...confirmPasswordRegister}
+					onPaste={(e) => {
+						// Prevent accidental paste into confirm field on mobile
+						e.preventDefault()
+					}}
+					ref={(e) => {
+						confirmPasswordRegister.ref(e)
+						confirmPasswordRef.current = e
+					}}
 				/>
 				{errors.confirmedPassword && (
 					<p className="text-error text-sm mt-1">
@@ -155,7 +210,7 @@ export default function RegisterForm() {
 				)}
 			</div>
 			<div className="form-control">
-				<button type="submit" className="btn btn-primary w-full">
+				<button type="submit" className="btn btn-primary w-full" disabled={isSubmitting}>
 					Register
 				</button>
 			</div>
