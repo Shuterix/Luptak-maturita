@@ -89,7 +89,12 @@ export default function StudentDashboard() {
 		setLoading(true)
 		setError(null)
 		try {
-			const res = await fetch('/api/students/lessons', { cache: 'no-store' })
+			// Use different endpoint based on role
+			const endpoint = user?.role === 'trainer' || user?.role === 'admin' 
+				? '/api/trainers/lessons' 
+				: '/api/students/lessons'
+			
+			const res = await fetch(endpoint, { cache: 'no-store' })
 			if (!res.ok) {
 				const data = await res.json()
 				throw new Error(data.error || 'Failed to load lessons')
@@ -105,9 +110,10 @@ export default function StudentDashboard() {
 	}
 
 	useEffect(() => {
-		if (user && user.role === 'student') {
+		if (user && (user.role === 'student' || user.role === 'trainer' || user.role === 'admin')) {
 			fetchLessons()
 		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [user])
 
 	// Get lessons for the current week
@@ -204,13 +210,15 @@ export default function StudentDashboard() {
 		).length
 	}, [lessons])
 
-	if (!user || user.role !== 'student') {
+	if (!user || (user.role !== 'student' && user.role !== 'trainer' && user.role !== 'admin')) {
 		return (
 			<div className="flex items-center justify-center h-64">
-				<Alert variant="error">This page is only available for students.</Alert>
+				<Alert variant="error">This page is only available for students and trainers.</Alert>
 			</div>
 		)
 	}
+
+	const isTrainer = user.role === 'trainer' || user.role === 'admin'
 
 	return (
 		<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
@@ -219,7 +227,7 @@ export default function StudentDashboard() {
 				<div>
 					<h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
 						<Calendar className="h-7 w-7 text-primary" />
-						My Schedule
+						{isTrainer ? 'My Teaching Schedule' : 'My Schedule'}
 					</h1>
 					<p className="text-base-content/60 mt-1">
 						{upcomingCount} upcoming lesson{upcomingCount !== 1 ? 's' : ''}
@@ -295,6 +303,7 @@ export default function StudentDashboard() {
 													lesson={lesson}
 													onCancel={() => handleCancelClick(lesson)}
 													compact
+													isTrainer={isTrainer}
 												/>
 											))
 										)}
@@ -331,6 +340,7 @@ export default function StudentDashboard() {
 												key={lesson._id}
 												lesson={lesson}
 												onCancel={() => handleCancelClick(lesson)}
+												isTrainer={isTrainer}
 											/>
 										))}
 									</div>
@@ -379,11 +389,28 @@ export default function StudentDashboard() {
 									<Clock className="h-4 w-4" />
 									{formatTimeRange(cancellingLesson.start, cancellingLesson.end)}
 								</div>
-								{cancellingLesson.teacherName && (
-									<div className="flex items-center gap-2 text-sm text-base-content/70">
-										<User className="h-4 w-4" />
-										{cancellingLesson.teacherName}
-									</div>
+								{isTrainer ? (
+									<>
+										{cancellingLesson.studentNames && cancellingLesson.studentNames.length > 0 && (
+											<div className="flex items-center gap-2 text-sm text-base-content/70">
+												<Users className="h-4 w-4" />
+												{cancellingLesson.studentNames.join(', ')}
+											</div>
+										)}
+										{cancellingLesson.pairLabel && (
+											<div className="flex items-center gap-2 text-sm text-base-content/70">
+												<Users className="h-4 w-4" />
+												{cancellingLesson.pairLabel}
+											</div>
+										)}
+									</>
+								) : (
+									cancellingLesson.teacherName && (
+										<div className="flex items-center gap-2 text-sm text-base-content/70">
+											<User className="h-4 w-4" />
+											{cancellingLesson.teacherName}
+										</div>
+									)
 								)}
 								{cancellingLesson.roomLabel && (
 									<div className="flex items-center gap-2 text-sm text-base-content/70">
@@ -406,7 +433,7 @@ export default function StudentDashboard() {
 									onChange={(e) => setCancelReason(e.target.value)}
 								/>
 								<p className="text-xs text-base-content/50 mt-1">
-									Your teacher will be notified of this cancellation.
+									{isTrainer ? 'Students will be notified of this cancellation.' : 'Your teacher will be notified of this cancellation.'}
 								</p>
 							</div>
 						</div>
@@ -450,10 +477,12 @@ function LessonCard({
 	lesson,
 	onCancel,
 	compact = false,
+	isTrainer = false,
 }: {
 	lesson: StudentLesson
 	onCancel: () => void
 	compact?: boolean
+	isTrainer?: boolean
 }) {
 	const isCancelled = lesson.status === 'cancelled'
 	const lessonDate = parseISO(lesson.date)
@@ -510,13 +539,38 @@ function LessonCard({
 			{/* Details */}
 			{!compact && (
 				<div className="mt-3 space-y-2 text-sm">
-					{lesson.teacherName && (
-						<div className="flex items-center gap-2 text-base-content/80">
-							<div className="p-1 rounded bg-base-200/50">
-								<User className="h-3.5 w-3.5" />
+					{isTrainer ? (
+						// For trainers, show students
+						<>
+							{lesson.studentNames && lesson.studentNames.length > 0 && (
+								<div className="flex items-center gap-2 text-base-content/80">
+									<div className="p-1 rounded bg-base-200/50">
+										<Users className="h-3.5 w-3.5" />
+									</div>
+									<span className="font-medium">
+										{lesson.studentNames.join(', ')}
+									</span>
+								</div>
+							)}
+							{lesson.pairLabel && (
+								<div className="flex items-center gap-2 text-base-content/80">
+									<div className="p-1 rounded bg-base-200/50">
+										<Users className="h-3.5 w-3.5" />
+									</div>
+									<span className="font-medium">{lesson.pairLabel}</span>
+								</div>
+							)}
+						</>
+					) : (
+						// For students, show teacher
+						lesson.teacherName && (
+							<div className="flex items-center gap-2 text-base-content/80">
+								<div className="p-1 rounded bg-base-200/50">
+									<User className="h-3.5 w-3.5" />
+								</div>
+								<span className="font-medium">{lesson.teacherName}</span>
 							</div>
-							<span className="font-medium">{lesson.teacherName}</span>
-						</div>
+						)
 					)}
 					{lesson.roomLabel && (
 						<div className="flex items-center gap-2 text-base-content/80">
@@ -526,7 +580,7 @@ function LessonCard({
 							<span>{lesson.roomLabel}</span>
 						</div>
 					)}
-					{lesson.pairLabel && (
+					{!isTrainer && lesson.pairLabel && (
 						<div className="flex items-center gap-2 text-base-content/80">
 							<div className="p-1 rounded bg-base-200/50">
 								<Users className="h-3.5 w-3.5" />
@@ -545,11 +599,30 @@ function LessonCard({
 			{/* Compact view details */}
 			{compact && (
 				<div className="mt-2 space-y-1">
-					{lesson.teacherName && (
-						<div className="text-xs text-base-content/70 truncate">
-							<User className="h-3 w-3 inline mr-1" />
-							{lesson.teacherName}
-						</div>
+					{isTrainer ? (
+						// For trainers, show students
+						<>
+							{lesson.studentNames && lesson.studentNames.length > 0 && (
+								<div className="text-xs text-base-content/70 truncate">
+									<Users className="h-3 w-3 inline mr-1" />
+									{lesson.studentNames.join(', ')}
+								</div>
+							)}
+							{lesson.pairLabel && (
+								<div className="text-xs text-base-content/70 truncate">
+									<Users className="h-3 w-3 inline mr-1" />
+									{lesson.pairLabel}
+								</div>
+							)}
+						</>
+					) : (
+						// For students, show teacher
+						lesson.teacherName && (
+							<div className="text-xs text-base-content/70 truncate">
+								<User className="h-3 w-3 inline mr-1" />
+								{lesson.teacherName}
+							</div>
+						)
 					)}
 					{lesson.roomLabel && (
 						<div className="text-xs text-base-content/70 truncate">

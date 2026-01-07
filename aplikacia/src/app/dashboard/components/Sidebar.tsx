@@ -43,7 +43,7 @@ export default function Sidebar() {
 			name: 'My Schedule',
 			href: '/dashboard/students',
 			icon: <Calendar className="h-5 w-5" />,
-			roles: ['student'],
+			roles: ['student', 'trainer', 'admin'],
 		},
 		{
 			name: 'Couples',

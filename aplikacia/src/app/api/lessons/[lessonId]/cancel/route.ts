@@ -66,28 +66,62 @@ export async function POST(
 
 		const lesson = timetable.lessons![lessonIndex]
 
-		// Verify the student is a participant in this lesson
-		const isParticipant =
-			(lesson.studentName && lesson.studentName === studentName) ||
-			(lesson.studentNames && lesson.studentNames.includes(studentName)) ||
-			(lesson.pairLabel && lesson.pairLabel.includes(studentName))
+		const userRole = (currentUser as any).role
 
-		// Students can only cancel their own lessons, trainers/admins can cancel any
-		if ((currentUser as any).role === 'student' && !isParticipant) {
-			return NextResponse.json({ error: 'You can only cancel your own lessons' }, { status: 403 })
+		// Trainers and admins can cancel any lesson
+		if (userRole === 'trainer' || userRole === 'admin') {
+			// Allow cancellation - no further checks needed
+		} else if (userRole === 'student') {
+			// Students can only cancel their own lessons
+			// Use the same name matching logic as the lessons fetching endpoint
+			const nameMatches = (nameToCheck: string, targetName: string): boolean => {
+				// Direct match (case-insensitive)
+				if (nameToCheck.toLowerCase() === targetName.toLowerCase()) return true
+				// Check if it's a couple name (contains " & ") and split it
+				if (nameToCheck.includes(' & ')) {
+					const individualNames = nameToCheck.split(' & ').map(n => n.trim())
+					return individualNames.some(name => name.toLowerCase() === targetName.toLowerCase())
+				}
+				return false
+			}
+
+			// Verify the student is a participant in this lesson
+			let isParticipant = false
+			
+			if (lesson.studentName) {
+				isParticipant = nameMatches(lesson.studentName, studentName)
+			}
+			
+			if (!isParticipant && lesson.studentNames && Array.isArray(lesson.studentNames)) {
+				// Check each name in the array (could be individual names or couple names)
+				isParticipant = lesson.studentNames.some(name => nameMatches(name, studentName))
+			}
+			
+			if (!isParticipant && lesson.pairLabel) {
+				isParticipant = nameMatches(lesson.pairLabel, studentName)
+			}
+
+			if (!isParticipant) {
+				return NextResponse.json({ error: 'You can only cancel your own lessons' }, { status: 403 })
+			}
+		} else {
+			return NextResponse.json({ error: 'Unauthorized role' }, { status: 403 })
 		}
 
 		// Update the lesson status
-		timetable.lessons![lessonIndex] = {
-			...lesson,
-			status: 'cancelled',
-			cancellation: {
-				byUserId: new Types.ObjectId((currentUser as any)._id.toString()),
-				reason: reason.trim(),
-				at: new Date(),
-			},
+		// Use Mongoose's set method to update nested document properties
+		const lessonToUpdate = timetable.lessons![lessonIndex]
+		
+		// Update the lesson properties directly
+		lessonToUpdate.status = 'cancelled'
+		lessonToUpdate.cancellation = {
+			byUserId: new Types.ObjectId((currentUser as any)._id.toString()),
+			reason: reason.trim(),
+			at: new Date(),
 		}
 
+		// Mark the lessons array as modified so Mongoose knows to save it
+		timetable.markModified('lessons')
 		await timetable.save()
 
 		return NextResponse.json({
