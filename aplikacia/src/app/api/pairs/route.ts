@@ -128,6 +128,7 @@ export async function GET(request: NextRequest) {
 		}
 
 		const pairs = await Pair.find({ clubId: user.clubId })
+			.select('+baseGroups +baseGroup') // Explicitly include baseGroups and baseGroup
 			.populate('studentAId', 'firstName lastName email unavailability')
 			.populate('studentBId', 'firstName lastName email unavailability')
 			.populate('preferredTeacherId', 'firstName lastName')
@@ -136,6 +137,11 @@ export async function GET(request: NextRequest) {
 		// Calculate couple unavailability for each pair using the populated student data
 		const pairsWithUnavailability = await Promise.all(
 			pairs.map(async (pair) => {
+				// Get baseGroups directly from the mongoose document (before toObject)
+				// This ensures we get the actual database value
+				const baseGroupsRaw = (pair as any).baseGroups
+				const baseGroupRaw = (pair as any).baseGroup
+				
 				// Convert the pair to a plain object to properly access nested properties
 				const pairObj = pair.toObject()
 				const studentA = pairObj.studentAId as any
@@ -148,16 +154,63 @@ export async function GET(request: NextRequest) {
 					calculatedUnavailability = calculateCoupleUnavailability(studentA, studentB)
 					
 					// Update the pair in the database with calculated unavailability
+					// Use $set to only update unavailability without affecting other fields
 					if (calculatedUnavailability) {
-						await Pair.findByIdAndUpdate(pair._id, { unavailability: calculatedUnavailability })
+						await Pair.findByIdAndUpdate(
+							pair._id, 
+							{ $set: { unavailability: calculatedUnavailability } },
+							{ new: false } // Don't return updated doc, just update
+						)
 					}
 				}
 				
-				// Return the pair with populated student data AND calculated unavailability
-				return {
+				// Process baseGroups - convert to array of strings
+				let baseGroupsValue: string[] | undefined = undefined
+				if (baseGroupsRaw !== undefined && baseGroupsRaw !== null) {
+					if (Array.isArray(baseGroupsRaw)) {
+						baseGroupsValue = baseGroupsRaw.map((g: any) => String(g)).filter(Boolean)
+					} else if (baseGroupsRaw) {
+						baseGroupsValue = [String(baseGroupsRaw)]
+					}
+				}
+				
+				// If still undefined, check pairObj as fallback
+				if (baseGroupsValue === undefined && pairObj.baseGroups !== undefined && pairObj.baseGroups !== null) {
+					if (Array.isArray(pairObj.baseGroups)) {
+						baseGroupsValue = pairObj.baseGroups.map((g: any) => String(g)).filter(Boolean)
+					} else if (pairObj.baseGroups) {
+						baseGroupsValue = [String(pairObj.baseGroups)]
+					}
+				}
+				
+				const baseGroupValue = baseGroupRaw || pairObj.baseGroup || undefined
+				
+				// Log for debugging (only first 3 to avoid spam)
+				if (pairs.indexOf(pair) < 3) {
+					console.log(`[PAIRS API] Pair ${pair._id}:`, {
+						baseGroupsRaw: baseGroupsRaw,
+						baseGroupsFromObj: pairObj.baseGroups,
+						baseGroupsFinal: baseGroupsValue,
+						baseGroupRaw: baseGroupRaw,
+						baseGroupFinal: baseGroupValue
+					})
+				}
+				
+				// Build response object, explicitly including baseGroups
+				const responseObj: any = {
 					...pairObj,
 					unavailability: calculatedUnavailability
 				}
+				
+				// Always include baseGroups (even if undefined) so frontend knows it was checked
+				if (baseGroupsValue !== undefined) {
+					responseObj.baseGroups = baseGroupsValue
+				}
+				if (baseGroupValue !== undefined) {
+					responseObj.baseGroup = baseGroupValue
+				}
+				
+				return responseObj
 			})
 		)
 
@@ -180,7 +233,7 @@ export async function POST(request: NextRequest) {
 		}
 
 		const body = await request.json()
-		const { studentAId, studentBId, baseGroup, preferredTeacherId } = body
+		const { studentAId, studentBId, baseGroup, baseGroups, preferredTeacherId } = body
 
 		if (!studentAId || !studentBId) {
 			return NextResponse.json({ error: 'Both students are required' }, { status: 400 })
@@ -236,7 +289,8 @@ export async function POST(request: NextRequest) {
 			clubId: user.clubId,
 			studentAId,
 			studentBId,
-			baseGroup: baseGroup || undefined,
+			baseGroups: baseGroups && Array.isArray(baseGroups) && baseGroups.length > 0 ? baseGroups : undefined,
+			baseGroup: undefined, // Clear legacy field
 			preferredTeacherId: preferredTeacherId || undefined,
 			unavailability: coupleUnavailability,
 		})

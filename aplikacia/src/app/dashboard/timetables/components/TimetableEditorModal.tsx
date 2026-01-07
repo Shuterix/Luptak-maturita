@@ -24,9 +24,10 @@ interface GroupLesson {
 
 interface Couple {
 	name: string
-	studentA: { name: string; baseGroup?: string }
-	studentB: { name: string; baseGroup?: string }
-	baseGroup?: string
+	studentA: { name: string; baseGroup?: string; baseGroups?: string[] }
+	studentB: { name: string; baseGroup?: string; baseGroups?: string[] }
+	baseGroup?: string // Legacy field
+	baseGroups?: string[] // Array of groups
 }
 
 interface Teacher {
@@ -61,7 +62,7 @@ export function TimetableEditorModal({
 	const [currentStep, setCurrentStep] = useState<Step>('group-selection')
 	const [groupLessons, setGroupLessons] = useState<GroupLesson[]>(initialGroupLessons)
 	const [currentGroupIndex, setCurrentGroupIndex] = useState(0)
-	const [availableGroups, setAvailableGroups] = useState<string[]>([])
+	const [availableGroups, setAvailableGroups] = useState<Array<{ _id: string; name: string; description?: string }>>([])
 
 	// Fetch groups from database when modal opens
 	useEffect(() => {
@@ -358,8 +359,8 @@ export function TimetableEditorModal({
 								>
 									<option value="">Select a group…</option>
 									{availableGroups.map((group) => (
-										<option key={group} value={group}>
-											{group}
+										<option key={group._id} value={group.name}>
+											{group.name}
 										</option>
 									))}
 								</select>
@@ -590,9 +591,24 @@ export function TimetableEditorModal({
 				)
 
 			case 'participants': {
+				// Find the selected group by name to get its ID
+				const selectedGroup = availableGroups.find(g => g.name === formData.groupName)
+				const selectedGroupId = selectedGroup?._id
+				
 				// Only show couples that match the selected group
-				const availableCouples = formData.groupName
-					? couples.filter((couple) => couple.baseGroup === formData.groupName)
+				const availableCouples = formData.groupName && selectedGroupId
+					? couples.filter((couple) => {
+						// Check if couple belongs to the selected group by ID (support both baseGroups array and legacy baseGroup)
+						if (couple.baseGroups && Array.isArray(couple.baseGroups)) {
+							// Check if any group ID in baseGroups matches the selected group ID
+							return couple.baseGroups.some(gId => String(gId) === String(selectedGroupId))
+						}
+						// Fallback to legacy baseGroup field (if it's a group ID string)
+						if (couple.baseGroup) {
+							return String(couple.baseGroup) === String(selectedGroupId)
+						}
+						return false
+					})
 					: []
 
 				const allSelected = availableCouples.length > 0 && 
@@ -676,7 +692,9 @@ export function TimetableEditorModal({
 													<div>
 														<p className="font-medium text-base-content">{couple.name}</p>
 														<p className="text-xs text-base-content/60">
-															Group {couple.baseGroup ?? '—'}
+															Groups: {couple.baseGroups && couple.baseGroups.length > 0 
+																? couple.baseGroups.join(', ') 
+																: (couple.baseGroup ?? '—')}
 														</p>
 													</div>
 												</div>

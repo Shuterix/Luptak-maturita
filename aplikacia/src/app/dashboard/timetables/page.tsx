@@ -1092,7 +1092,8 @@ const handleGenerateAutomaticSchedule = () => {
 				desiredLessons: 0,
 				priority: 5,
 				unavailableDates: [],
-				baseGroup: pair.baseGroup,
+				baseGroup: pair.baseGroups && pair.baseGroups.length > 0 ? pair.baseGroups[0] : pair.baseGroup, // Use first group or legacy baseGroup
+				baseGroups: pair.baseGroups || (pair.baseGroup ? [pair.baseGroup] : []), // Support multiple groups
 			}
 		})
 
@@ -1129,7 +1130,8 @@ const handleGenerateAutomaticSchedule = () => {
 					desiredLessons: 0, // Not used for group lessons
 					priority: 5, // Default priority
 					unavailableDates: [],
-					baseGroup: participant.baseGroup,
+					baseGroup: participant.baseGroups && participant.baseGroups.length > 0 ? participant.baseGroups[0] : participant.baseGroup, // Use first group or legacy baseGroup
+					baseGroups: participant.baseGroups || (participant.baseGroup ? [participant.baseGroup] : []), // Support multiple groups
 					unavailability: dbCouple?.unavailability, // Pass unavailability for day-specific checks
 					// Create minimal Student objects for type compatibility
 					studentA: {
@@ -1752,18 +1754,22 @@ const handleGenerateAutomaticSchedule = () => {
 				const studentA = pair.studentAId
 				const studentB = pair.studentBId
 				const coupleName = `${studentA.firstName} ${studentA.lastName} & ${studentB.firstName} ${studentB.lastName}`
+				const groups = pair.baseGroups || (pair.baseGroup ? [pair.baseGroup] : [])
 				
 				return {
 					name: coupleName,
 					studentA: {
 						name: `${studentA.firstName} ${studentA.lastName}`,
-						baseGroup: pair.baseGroup,
+						baseGroup: groups.length > 0 ? groups[0] : pair.baseGroup, // Legacy support
+						baseGroups: groups,
 					},
 					studentB: {
 						name: `${studentB.firstName} ${studentB.lastName}`,
-						baseGroup: pair.baseGroup,
+						baseGroup: groups.length > 0 ? groups[0] : pair.baseGroup, // Legacy support
+						baseGroups: groups,
 					},
-					baseGroup: pair.baseGroup,
+					baseGroup: groups.length > 0 ? groups[0] : pair.baseGroup, // Legacy support
+					baseGroups: groups,
 				}
 			})
 	}, [dbCouples])

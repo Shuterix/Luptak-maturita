@@ -17,7 +17,8 @@ export interface Student {
 	unavailableDates?: string[] // dates (yyyy-MM-dd) when the student cannot attend
 	preferredTimes?: string[] // preferred time slots (e.g., ["09:00-11:00", "14:00-16:00"])
 	weeklyLessons?: number // number of lessons per week
-	baseGroup?: string // e.g., 'juniors1', 'juniors2' - assigned by coaches
+	baseGroup?: string // Legacy field - e.g., 'juniors1', 'juniors2' - assigned by coaches
+	baseGroups?: string[] // Array of groups - e.g., ['juniors1', 'intermediates']
 	unavailability?: any // Weekly unavailability (times when CANNOT train) - day-specific
 }
 
@@ -29,7 +30,8 @@ export interface Couple {
 	desiredLessons: number
 	priority: number
 	preferredTeacher?: string
-	baseGroup?: string // inherited from students, can be overridden
+	baseGroup?: string // Legacy field - inherited from students, can be overridden
+	baseGroups?: string[] // Array of groups - inherited from students, can be overridden
 	unavailableDates?: string[] // dates when either student cannot attend
 	unavailability?: any // Weekly unavailability (times when CANNOT train) - day-specific
 }

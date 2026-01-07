@@ -117,7 +117,7 @@ export async function PUT(
 		}
 
 		const body = await request.json()
-		const { studentAId, studentBId, baseGroup, preferredTeacherId } = body
+		const { studentAId, studentBId, baseGroup, baseGroups, preferredTeacherId } = body
 
 		// If students are being changed, validate them
 		if (studentAId || studentBId) {
@@ -169,8 +169,22 @@ export async function PUT(
 		}
 
 		// Update other fields
-		if (baseGroup !== undefined) {
-			pair.baseGroup = baseGroup || undefined
+		if (baseGroups !== undefined) {
+			if (baseGroups && Array.isArray(baseGroups) && baseGroups.length > 0) {
+				pair.baseGroups = baseGroups
+			} else {
+				pair.baseGroups = undefined
+			}
+			// Clear legacy baseGroup field
+			pair.baseGroup = undefined
+		} else if (baseGroup !== undefined) {
+			// Legacy support: if baseGroup is provided but not baseGroups, convert it
+			if (baseGroup) {
+				pair.baseGroups = [baseGroup]
+			} else {
+				pair.baseGroups = undefined
+			}
+			pair.baseGroup = undefined
 		}
 
 		if (preferredTeacherId !== undefined) {

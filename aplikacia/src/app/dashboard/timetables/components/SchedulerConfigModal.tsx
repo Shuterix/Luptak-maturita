@@ -409,10 +409,10 @@ export function SchedulerConfigModal({
 								
 								{dbTeachers.length > 0 ? (
 									<>
-										<div className="flex items-center justify-between">
+								<div className="flex items-center justify-between">
 											<span className="text-sm text-base-content/60">{dbTeachers.length} teacher(s) in club</span>
-										</div>
-										<div className="space-y-2 max-h-[400px] overflow-y-auto">
+								</div>
+								<div className="space-y-2 max-h-[400px] overflow-y-auto">
 											{dbTeachers.map((teacher) => {
 												const teacherName = `${teacher.firstName} ${teacher.lastName}`
 												const isExpanded = expandedTeachers.has(teacher._id)
@@ -423,36 +423,36 @@ export function SchedulerConfigModal({
 													room: '',
 												}
 												
-												return (
+										return (
 													<div key={teacher._id} className="border border-base-300 rounded-xl bg-base-100 overflow-hidden">
-														<button
-															type="button"
-															onClick={() => {
-																const newExpanded = new Set(expandedTeachers)
-																if (isExpanded) {
+													<button
+														type="button"
+														onClick={() => {
+															const newExpanded = new Set(expandedTeachers)
+															if (isExpanded) {
 																	newExpanded.delete(teacher._id)
-																} else {
+															} else {
 																	newExpanded.add(teacher._id)
-																}
-																setExpandedTeachers(newExpanded)
-															}}
+															}
+															setExpandedTeachers(newExpanded)
+														}}
 															className="w-full flex items-center justify-between p-4 hover:bg-base-200 transition"
-														>
-															<div className="flex items-center gap-3">
-																<span className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+													>
+														<div className="flex items-center gap-3">
+															<span className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
 																<span className="font-medium">{teacherName}</span>
 																{unavailabilityStr === 'Available anytime' && (
 																	<span className="badge badge-sm badge-success">Available anytime</span>
-																)}
-															</div>
-															<div className="flex items-center gap-2">
+															)}
+														</div>
+														<div className="flex items-center gap-2">
 																{unavailabilityStr !== 'Available anytime' && (
 																	<span className="text-xs text-warning">Has unavailability</span>
-																)}
-															</div>
-														</button>
-														{isExpanded && (
-															<div className="p-4 pt-0 space-y-3 border-t border-base-300">
+															)}
+														</div>
+													</button>
+												{isExpanded && (
+													<div className="p-4 pt-0 space-y-3 border-t border-base-300">
 																<div className="text-sm">
 																	<p className="font-medium text-base-content/70 mb-1">Unavailability (from profile):</p>
 																	<p className={`text-sm ${unavailabilityStr === 'Available anytime' ? 'text-success' : 'text-warning'}`}>
@@ -462,12 +462,12 @@ export function SchedulerConfigModal({
 																		To change unavailability, the teacher must update their profile.
 																	</p>
 																</div>
-																<div className="grid grid-cols-2 gap-3">
-																	<label className="form-control">
-																		<span className="label-text">Max lessons per day</span>
-																		<Input
-																			type="number"
-																			min={1}
+														<div className="grid grid-cols-2 gap-3">
+															<label className="form-control">
+																<span className="label-text">Max lessons per day</span>
+																<Input
+																	type="number"
+																	min={1}
 																			value={config.maxLessonsPerDay}
 																			onChange={(event) => {
 																				setTeacherConfigs(prev => ({
@@ -478,11 +478,11 @@ export function SchedulerConfigModal({
 																					}
 																				}))
 																			}}
-																		/>
-																	</label>
-																	<label className="form-control">
-																		<span className="label-text">Room</span>
-																		<Input
+																/>
+															</label>
+															<label className="form-control">
+																<span className="label-text">Room</span>
+																<Input
 																			value={config.room}
 																			onChange={(event) => {
 																				setTeacherConfigs(prev => ({
@@ -493,16 +493,16 @@ export function SchedulerConfigModal({
 																					}
 																				}))
 																			}}
-																			placeholder="Room A"
-																		/>
-																	</label>
-																</div>
-															</div>
-														)}
+																	placeholder="Room A"
+																/>
+															</label>
+														</div>
 													</div>
-												)
-											})}
-										</div>
+												)}
+											</div>
+										)
+									})}
+								</div>
 									</>
 								) : (
 									<Alert variant="warning">
@@ -617,7 +617,7 @@ export function SchedulerConfigModal({
 																						{aStr}
 																					</div>
 																				</div>
-																			) : (
+																		) : (
 																				<span className="text-success/70 text-xs">✓ Available anytime</span>
 																			)
 																		})()}
@@ -638,26 +638,26 @@ export function SchedulerConfigModal({
 																						{bStr}
 																					</div>
 																				</div>
-																			) : (
+																		) : (
 																				<span className="text-success/70 text-xs">✓ Available anytime</span>
 																			)
 																		})()}
 																	</div>
 																	
 																	{/* Calculated Couple Unavailability */}
-																	<div className="pt-2 border-t border-base-300">
+																		<div className="pt-2 border-t border-base-300">
 																		<span className="text-base-content/60 font-medium">Combined Couple Unavailability: </span>
 																		{pairUnavailStr !== 'Available anytime' ? (
 																			<div className="mt-1 text-xs text-error/80 font-mono bg-error/10 rounded px-2 py-1 border border-error/20">
 																				{pairUnavailStr}
-																			</div>
+																		</div>
 																		) : hasStudentUnavailability ? (
 																			<div className="mt-1 text-xs text-warning/80 font-mono bg-warning/10 rounded px-2 py-1 border border-warning/20">
 																				⚠ Not calculated yet - click Refresh
-																			</div>
+																		</div>
 																		) : (
 																			<span className="text-success/70 text-sm">✓ Available anytime</span>
-																		)}
+																	)}
 																	</div>
 																</div>
 																
@@ -905,7 +905,7 @@ export function SchedulerConfigModal({
 															<span className="text-base-content/50 ml-2">
 																(Max: {config.maxLessonsPerDay}/day, Room: {config.room || 'Not set'})
 															</span>
-														</div>
+												</div>
 														<span className={`text-xs ${unavailStr === 'Available anytime' ? 'text-success' : 'text-warning'}`}>
 															{unavailStr === 'Available anytime' ? '✓ Available anytime' : unavailStr}
 														</span>
@@ -950,9 +950,15 @@ export function SchedulerConfigModal({
 																	Desired: {config.desiredLessons} lessons · Priority: {config.priority} · Teachers: {teacherLessonsStr}
 																</p>
 															</div>
-															{pair.baseGroup && (
+															{(pair.baseGroups && pair.baseGroups.length > 0) ? (
+																<div className="flex flex-wrap gap-1 ml-2">
+																	{pair.baseGroups.map(g => (
+																		<span key={g} className="badge badge-outline badge-xs">{g}</span>
+																	))}
+																</div>
+															) : pair.baseGroup ? (
 																<span className="badge badge-outline badge-xs ml-2">{pair.baseGroup}</span>
-															)}
+															) : null}
 														</div>
 													</div>
 												)

@@ -18,11 +18,19 @@ interface Teacher {
 	lastName: string
 }
 
+interface Group {
+	_id: string
+	name: string
+	description?: string
+	coupleCount?: number
+}
+
 interface Pair {
 	_id: string
 	studentAId: Student
 	studentBId: Student
-	baseGroup?: string
+	baseGroup?: string // Legacy field
+	baseGroups?: string[] // Array of group IDs
 	preferredTeacherId?: Teacher
 	createdAt?: string
 }
@@ -32,7 +40,7 @@ export default function CouplesPage() {
 	const [pairs, setPairs] = useState<Pair[]>([])
 	const [students, setStudents] = useState<Student[]>([])
 	const [teachers, setTeachers] = useState<Teacher[]>([])
-	const [availableGroups, setAvailableGroups] = useState<string[]>([])
+	const [availableGroups, setAvailableGroups] = useState<Group[]>([])
 	const [loading, setLoading] = useState(true)
 	const [submitting, setSubmitting] = useState(false)
 	const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -49,17 +57,32 @@ export default function CouplesPage() {
 		key: 'partnerA' | 'partnerB' | 'baseGroup' | 'teacher' | null
 		direction: 'asc' | 'desc'
 	}>({ key: null, direction: 'asc' })
-	const [formData, setFormData] = useState({
+	const [formData, setFormData] = useState<{
+		studentAId: string
+		studentBId: string
+		baseGroup: string
+		baseGroups?: string[]
+		preferredTeacherId: string
+	}>({
 		studentAId: '',
 		studentBId: '',
 		baseGroup: '',
+		baseGroups: [],
 		preferredTeacherId: '',
 	})
-	const [newGroupName, setNewGroupName] = useState('')
-	const [showNewGroupInput, setShowNewGroupInput] = useState(false)
+	const [selectedGroupsForCouple, setSelectedGroupsForCouple] = useState<Set<string>>(new Set())
+	
+	// Group management state
+	const [isGroupModalOpen, setIsGroupModalOpen] = useState(false)
+	const [editingGroup, setEditingGroup] = useState<Group | null>(null)
+	const [groupFormData, setGroupFormData] = useState({
+		name: '',
+		description: '',
+	})
+	const [selectedCouplesForGroup, setSelectedCouplesForGroup] = useState<Set<string>>(new Set())
 	const [creatingGroup, setCreatingGroup] = useState(false)
-	const [deletingGroup, setDeletingGroup] = useState<string | null>(null)
-	const [groupToDelete, setGroupToDelete] = useState<string | null>(null)
+	const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null)
+	const [groupError, setGroupError] = useState<string | null>(null)
 
 	useEffect(() => {
 		// Wait for AuthContext to finish loading
@@ -106,6 +129,11 @@ export default function CouplesPage() {
 				throw new Error(errorData.error || 'Failed to fetch pairs')
 			}
 			const data = await res.json()
+			console.log('Fetched pairs:', data.pairs?.length, 'pairs')
+			// Log first pair's baseGroups for debugging
+			if (data.pairs && data.pairs.length > 0) {
+				console.log('First pair baseGroups:', data.pairs[0].baseGroups, 'baseGroup:', data.pairs[0].baseGroup)
+			}
 			setPairs(data.pairs || [])
 			setError(null)
 		} catch (err: any) {
@@ -151,6 +179,29 @@ export default function CouplesPage() {
 			if (res.ok) {
 				const data = await res.json()
 				setAvailableGroups(data.groups || [])
+				
+				// Check if migration is needed (pairs with legacy baseGroup but no matching Group)
+				const needsMigration = pairs.some(p => {
+					if (p.baseGroup && typeof p.baseGroup === 'string') {
+						// Check if there's a group with this name
+						const hasMatchingGroup = data.groups.some((g: Group) => 
+							g.name.toLowerCase() === p.baseGroup?.toLowerCase()
+						)
+						return !hasMatchingGroup
+					}
+					return false
+				})
+
+				if (needsMigration && user?.role === 'trainer') {
+					// Auto-run migration
+					try {
+						await fetch('/api/groups/migrate', { method: 'POST' })
+						// Refresh groups and pairs after migration
+						await Promise.all([fetchGroups(), fetchPairs()])
+					} catch (err) {
+						console.error('Error running migration:', err)
+					}
+				}
 			}
 		} catch (err) {
 			console.error('Error fetching groups:', err)
@@ -159,22 +210,26 @@ export default function CouplesPage() {
 
 	const handleOpenModal = (pair?: Pair) => {
 		setError(null) // Clear any previous errors
-		setShowNewGroupInput(false)
-		setNewGroupName('')
 		if (pair) {
 			setEditingPair(pair)
+			// Get groups from baseGroups array (should be group IDs)
+			const groups = pair.baseGroups || []
+			setSelectedGroupsForCouple(new Set(groups))
 			setFormData({
 				studentAId: pair.studentAId._id,
 				studentBId: pair.studentBId._id,
-				baseGroup: pair.baseGroup || '',
+				baseGroup: '', // Legacy - not used
+				baseGroups: groups,
 				preferredTeacherId: pair.preferredTeacherId?._id || '',
 			})
 		} else {
 			setEditingPair(null)
+			setSelectedGroupsForCouple(new Set())
 			setFormData({
 				studentAId: '',
 				studentBId: '',
 				baseGroup: '',
+				baseGroups: [],
 				preferredTeacherId: '',
 			})
 		}
@@ -184,14 +239,14 @@ export default function CouplesPage() {
 	const handleCloseModal = () => {
 		setIsModalOpen(false)
 		setEditingPair(null)
+		setSelectedGroupsForCouple(new Set())
 		setFormData({
 			studentAId: '',
 			studentBId: '',
 			baseGroup: '',
+			baseGroups: [],
 			preferredTeacherId: '',
 		})
-		setShowNewGroupInput(false)
-		setNewGroupName('')
 	}
 
 	const handleSubmit = async (e: React.FormEvent) => {
@@ -221,7 +276,8 @@ export default function CouplesPage() {
 				body: JSON.stringify({
 					studentAId: formData.studentAId,
 					studentBId: formData.studentBId,
-					baseGroup: formData.baseGroup || undefined,
+					baseGroups: Array.from(selectedGroupsForCouple).length > 0 ? Array.from(selectedGroupsForCouple) : undefined,
+					baseGroup: undefined, // Clear legacy field
 					preferredTeacherId: formData.preferredTeacherId || undefined,
 				}),
 			})
@@ -297,8 +353,12 @@ export default function CouplesPage() {
 	// Filter and sort pairs
 	const filteredAndSortedPairs = useMemo(() => {
 		let filtered = pairs.filter((pair) => {
-			// Filter by base group
-			if (filters.baseGroup && pair.baseGroup !== filters.baseGroup) return false
+			// Filter by base group (check both baseGroup and baseGroups)
+			if (filters.baseGroup) {
+				const hasGroup = pair.baseGroup === filters.baseGroup || 
+					(pair.baseGroups && pair.baseGroups.includes(filters.baseGroup))
+				if (!hasGroup) return false
+			}
 
 			// Filter by preferred teacher
 			if (filters.preferredTeacher) {
@@ -332,8 +392,9 @@ export default function CouplesPage() {
 						bVal = getStudentName(b.studentBId)
 						break
 					case 'baseGroup':
-						aVal = a.baseGroup || ''
-						bVal = b.baseGroup || ''
+						// Get first group from baseGroups array or use legacy baseGroup
+						aVal = (a.baseGroups && a.baseGroups.length > 0) ? a.baseGroups[0] : (a.baseGroup || '')
+						bVal = (b.baseGroups && b.baseGroups.length > 0) ? b.baseGroups[0] : (b.baseGroup || '')
 						break
 					case 'teacher':
 						aVal = a.preferredTeacherId
@@ -363,85 +424,119 @@ export default function CouplesPage() {
 		}))
 	}
 
-	const handleCreateGroup = async () => {
-		if (!newGroupName.trim()) {
-			setError('Group name cannot be empty')
-			return
+	// Group management functions
+	const handleOpenGroupModal = (group?: Group) => {
+		setGroupError(null)
+		if (group) {
+			setEditingGroup(group)
+			setGroupFormData({
+				name: group.name,
+				description: group.description || '',
+			})
+			// Find couples in this group
+			const coupleIds = pairs
+				.filter(p => p.baseGroups?.includes(group._id))
+				.map(p => p._id)
+			setSelectedCouplesForGroup(new Set(coupleIds))
+		} else {
+			setEditingGroup(null)
+			setGroupFormData({
+				name: '',
+				description: '',
+			})
+			setSelectedCouplesForGroup(new Set())
 		}
+		setIsGroupModalOpen(true)
+	}
 
-		if (availableGroups.includes(newGroupName.trim())) {
-			setError('Group already exists')
-			return
-		}
+	const handleCloseGroupModal = () => {
+		setIsGroupModalOpen(false)
+		setEditingGroup(null)
+		setGroupFormData({
+			name: '',
+			description: '',
+		})
+		setSelectedCouplesForGroup(new Set())
+		setGroupError(null)
+	}
 
+	const handleCreateOrUpdateGroup = async (e: React.FormEvent) => {
+		e.preventDefault()
+		setGroupError(null)
 		setCreatingGroup(true)
-		setError(null)
+
+		if (!groupFormData.name.trim()) {
+			setGroupError('Group name is required')
+			setCreatingGroup(false)
+			return
+		}
+
 		try {
-			// Add to available groups immediately (optimistic update)
-			setAvailableGroups([...availableGroups, newGroupName.trim()].sort())
-			setNewGroupName('')
-			showAlertToast('Group created successfully', { variant: 'success' })
+			const coupleIds = Array.from(selectedCouplesForGroup)
+			const url = editingGroup ? `/api/groups/${editingGroup._id}` : '/api/groups'
+			const method = editingGroup ? 'PUT' : 'POST'
+
+			const res = await fetch(url, {
+				method,
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: groupFormData.name.trim(),
+					description: groupFormData.description.trim() || undefined,
+					coupleIds: coupleIds,
+				}),
+			})
+
+			if (!res.ok) {
+				const data = await res.json()
+				throw new Error(data.error || `Failed to ${editingGroup ? 'update' : 'create'} group`)
+			}
+
+			const responseData = await res.json()
+			showAlertToast(
+				editingGroup 
+					? 'Group updated successfully' 
+					: `Group created successfully${responseData.updatedPairs ? `. ${responseData.updatedPairs} couple(s) added.` : ''}`,
+				{ variant: 'success', title: 'Success' }
+			)
+
+			handleCloseGroupModal()
+			// Refresh groups and pairs
+			await Promise.all([fetchGroups(), fetchPairs()])
 		} catch (err: any) {
-			setError(err.message || 'Failed to create group')
-			showAlertToast(err.message || 'Failed to create group', { variant: 'error' })
+			setGroupError(err.message)
 		} finally {
 			setCreatingGroup(false)
 		}
 	}
 
-	const handleDeleteGroup = async (groupName: string) => {
-		if (!confirm(`Are you sure you want to delete the group "${groupName}"? This will remove the group assignment from all couples that have it.`)) {
+	const handleDeleteGroup = async (groupId: string) => {
+		if (!confirm('Are you sure you want to delete this group? Couples will be removed from this group but not deleted.')) {
 			return
 		}
 
-		setDeletingGroup(groupName)
-		setError(null)
-		try {
-			// Remove group from all pairs that have it
-			const pairsWithGroup = pairs.filter(p => p.baseGroup === groupName)
-			
-			// Update all pairs to remove the group
-			await Promise.all(
-				pairsWithGroup.map(pair =>
-					fetch(`/api/pairs/${pair._id}`, {
-						method: 'PUT',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({
-							studentAId: pair.studentAId._id,
-							studentBId: pair.studentBId._id,
-							baseGroup: undefined, // Remove group
-							preferredTeacherId: pair.preferredTeacherId?._id || undefined,
-						}),
-					})
-				)
-			)
+		setDeletingGroupId(groupId)
+		setGroupError(null)
 
-			// Remove from available groups
-			setAvailableGroups(availableGroups.filter(g => g !== groupName))
-			
-			// Refresh pairs to update the UI
-			await fetchPairs()
-			
-			showAlertToast(`Group "${groupName}" deleted successfully`, { variant: 'success' })
+		try {
+			const res = await fetch(`/api/groups/${groupId}`, {
+				method: 'DELETE',
+			})
+
+			if (!res.ok) {
+				const data = await res.json()
+				throw new Error(data.error || 'Failed to delete group')
+			}
+
+			showAlertToast('Group deleted successfully', { variant: 'success', title: 'Success' })
+			// Refresh groups and pairs
+			await Promise.all([fetchGroups(), fetchPairs()])
 		} catch (err: any) {
-			setError(err.message || 'Failed to delete group')
-			showAlertToast(err.message || 'Failed to delete group', { variant: 'error' })
+			setGroupError(err.message)
+			showAlertToast(err.message, { variant: 'error', title: 'Error' })
 		} finally {
-			setDeletingGroup(null)
-			setGroupToDelete(null)
+			setDeletingGroupId(null)
 		}
 	}
-
-	// Count couples per group
-	const groupCounts = useMemo(() => {
-		const counts: Record<string, number> = {}
-		pairs.forEach(pair => {
-			if (pair.baseGroup) {
-				counts[pair.baseGroup] = (counts[pair.baseGroup] || 0) + 1
-			}
-		})
-		return counts
-	}, [pairs])
 
 	if (loading) {
 		return (
@@ -502,64 +597,63 @@ export default function CouplesPage() {
 				<div className="card-body">
 					<div className="flex flex-wrap items-center justify-between gap-4 mb-4">
 						<h2 className="card-title">Groups Management</h2>
-						<div className="flex gap-2">
-							<input
-								type="text"
-								placeholder="New group name..."
-								className="input input-bordered input-sm w-48"
-								value={newGroupName}
-								onChange={(e) => setNewGroupName(e.target.value)}
-								onKeyDown={(e) => {
-									if (e.key === 'Enter' && newGroupName.trim()) {
-										handleCreateGroup()
-									}
-								}}
-							/>
-							<Button
-								className="btn-primary btn-sm"
-								onClick={handleCreateGroup}
-								disabled={creatingGroup || !newGroupName.trim()}
-							>
-								{creatingGroup ? (
-									<>
-										<span className="loading loading-spinner loading-xs"></span>
-										Creating...
-									</>
-								) : (
-									'Create Group'
-								)}
-							</Button>
-						</div>
+						<Button
+							className="btn-primary btn-sm"
+							onClick={() => handleOpenGroupModal()}
+						>
+							+ Create Group
+						</Button>
 					</div>
+
+					{groupError && (
+						<Alert variant="error" className="mb-4">
+							{groupError}
+						</Alert>
+					)}
 
 					{availableGroups.length === 0 ? (
 						<p className="text-base-content/60">
 							No groups created yet. Create a group to organize your couples.
 						</p>
 					) : (
-						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 							{availableGroups.map((group) => (
 								<div
-									key={group}
-									className="flex items-center justify-between p-3 bg-base-200 rounded-lg border border-base-300"
+									key={group._id}
+									className="p-4 bg-base-200 rounded-lg border border-base-300 hover:border-primary/50 transition"
 								>
-									<div className="flex items-center gap-2">
-										<span className="badge badge-outline badge-lg font-semibold">{group}</span>
-										<span className="text-sm text-base-content/60">
-											{groupCounts[group] || 0} couple{groupCounts[group] !== 1 ? 's' : ''}
-										</span>
+									<div className="flex items-start justify-between gap-2 mb-2">
+										<div className="flex-1">
+											<h3 className="font-semibold text-base-content mb-1">{group.name}</h3>
+											{group.description && (
+												<p className="text-sm text-base-content/60 line-clamp-2">{group.description}</p>
+											)}
+										</div>
 									</div>
-									<Button
-										className="btn-ghost btn-sm text-error hover:bg-error/10"
-										onClick={() => setGroupToDelete(group)}
-										disabled={deletingGroup === group}
-									>
-										{deletingGroup === group ? (
-											<span className="loading loading-spinner loading-xs"></span>
-										) : (
-											'Delete'
-										)}
-									</Button>
+									<div className="flex items-center justify-between mt-3 pt-3 border-t border-base-300">
+										<span className="text-xs text-base-content/60">
+											{group.coupleCount || 0} couple{(group.coupleCount || 0) !== 1 ? 's' : ''}
+										</span>
+										<div className="flex gap-2">
+											<Button
+												className="btn-ghost btn-xs"
+												onClick={() => handleOpenGroupModal(group)}
+											>
+												Edit
+											</Button>
+											<Button
+												className="btn-ghost btn-xs text-error hover:bg-error/10"
+												onClick={() => handleDeleteGroup(group._id)}
+												disabled={deletingGroupId === group._id}
+											>
+												{deletingGroupId === group._id ? (
+													<span className="loading loading-spinner loading-xs"></span>
+												) : (
+													'Delete'
+												)}
+											</Button>
+										</div>
+									</div>
 								</div>
 							))}
 						</div>
@@ -588,8 +682,8 @@ export default function CouplesPage() {
 							>
 								<option value="">All Groups</option>
 								{availableGroups.map((group) => (
-									<option key={group} value={group}>
-										{group}
+									<option key={group._id} value={group._id}>
+										{group.name}
 									</option>
 								))}
 							</select>
@@ -636,7 +730,25 @@ export default function CouplesPage() {
 													{getStudentName(pair.studentAId)} & {getStudentName(pair.studentBId)}
 												</p>
 												<div className="flex flex-wrap gap-2 mt-2">
-													{pair.baseGroup && (
+													{pair.baseGroups && pair.baseGroups.length > 0 && (
+														<>
+															{pair.baseGroups.map(g => {
+																// Try to find by ID first (new system)
+																let group = availableGroups.find(gr => gr._id === g)
+																// If not found, try to find by name (legacy system)
+																if (!group) {
+																	group = availableGroups.find(gr => gr.name === g)
+																}
+																// If still not found, it might be a legacy string name
+																return group ? (
+																	<span key={g} className="badge badge-outline badge-sm">{group.name}</span>
+																) : (
+																	<span key={g} className="badge badge-outline badge-sm">{g}</span>
+																)
+															})}
+														</>
+													)}
+													{pair.baseGroup && (!pair.baseGroups || pair.baseGroups.length === 0) && (
 														<span className="badge badge-outline badge-sm">{pair.baseGroup}</span>
 													)}
 													{pair.preferredTeacherId && (
@@ -725,7 +837,24 @@ export default function CouplesPage() {
 											<td>{getStudentName(pair.studentAId)}</td>
 											<td>{getStudentName(pair.studentBId)}</td>
 											<td>
-												{pair.baseGroup ? (
+												{pair.baseGroups && pair.baseGroups.length > 0 ? (
+													<div className="flex flex-wrap gap-1">
+														{pair.baseGroups.map(g => {
+															// Try to find by ID first (new system)
+															let group = availableGroups.find(gr => gr._id === g)
+															// If not found, try to find by name (legacy system)
+															if (!group) {
+																group = availableGroups.find(gr => gr.name === g)
+															}
+															// If still not found, it might be a legacy string name
+															return group ? (
+																<span key={g} className="badge badge-outline">{group.name}</span>
+															) : (
+																<span key={g} className="badge badge-outline">{g}</span>
+															)
+														})}
+													</div>
+												) : pair.baseGroup ? (
 													<span className="badge badge-outline">{pair.baseGroup}</span>
 												) : (
 													<span className="text-base-content/40">—</span>
@@ -828,90 +957,67 @@ export default function CouplesPage() {
 
 							<div className="form-control">
 								<label className="label">
-									<span className="label-text">Base Group</span>
+									<span className="label-text">Groups</span>
+									<span className="label-text-alt">
+										{selectedGroupsForCouple.size} selected (couple can be in multiple groups)
+									</span>
 								</label>
-								{!showNewGroupInput ? (
-									<div className="flex gap-2">
-										<select
-											className="select select-bordered flex-1"
-											value={formData.baseGroup}
-											onChange={(e) => {
-												if (e.target.value === '__create_new__') {
-													setShowNewGroupInput(true)
-													setFormData({ ...formData, baseGroup: '' })
-												} else {
-													setFormData({ ...formData, baseGroup: e.target.value })
-												}
-											}}
-										>
-											<option value="">No group assigned</option>
+								<div className="max-h-48 overflow-y-auto border border-base-300 rounded-lg p-3 space-y-2">
+									{availableGroups.length === 0 ? (
+										<p className="text-base-content/60 text-sm">No groups available. Create groups first.</p>
+									) : (
+										<>
+												<div className="flex items-center gap-2 pb-2 border-b border-base-300 mb-2 sticky top-0 bg-base-200">
+													<input
+														type="checkbox"
+														className="checkbox checkbox-sm"
+														checked={selectedGroupsForCouple.size === availableGroups.length && availableGroups.length > 0}
+														onChange={(e) => {
+															if (e.target.checked) {
+																setSelectedGroupsForCouple(new Set(availableGroups.map(g => g._id)))
+															} else {
+																setSelectedGroupsForCouple(new Set())
+															}
+														}}
+													/>
+													<span className="text-sm font-medium">Select All</span>
+												</div>
 											{availableGroups.map((group) => (
-												<option key={group} value={group}>
-													{group}
-												</option>
+												<label
+													key={group._id}
+													className="flex items-center gap-3 p-2 rounded-lg hover:bg-base-300/50 cursor-pointer"
+												>
+													<input
+														type="checkbox"
+														className="checkbox checkbox-sm"
+														checked={selectedGroupsForCouple.has(group._id)}
+														onChange={(e) => {
+															const newSet = new Set(selectedGroupsForCouple)
+															if (e.target.checked) {
+																newSet.add(group._id)
+															} else {
+																newSet.delete(group._id)
+															}
+															setSelectedGroupsForCouple(newSet)
+														}}
+													/>
+													<div className="flex-1">
+														<span className="font-medium">{group.name}</span>
+														{group.description && (
+															<p className="text-xs text-base-content/60 mt-0.5">{group.description}</p>
+														)}
+													</div>
+													<span className="text-xs text-base-content/60">
+														{group.coupleCount || 0} couple{(group.coupleCount || 0) !== 1 ? 's' : ''}
+													</span>
+												</label>
 											))}
-											<option value="__create_new__">+ Create New Group</option>
-										</select>
-									</div>
-								) : (
-									<div className="flex gap-2">
-										<input
-											type="text"
-											className="input input-bordered flex-1"
-											placeholder="Enter new group name..."
-											value={newGroupName}
-											onChange={(e) => setNewGroupName(e.target.value)}
-											onKeyDown={(e) => {
-												if (e.key === 'Enter') {
-													e.preventDefault()
-													if (newGroupName.trim()) {
-														setFormData({ ...formData, baseGroup: newGroupName.trim() })
-														setShowNewGroupInput(false)
-														setNewGroupName('')
-														// Add to available groups if not already there
-														if (!availableGroups.includes(newGroupName.trim())) {
-															setAvailableGroups([...availableGroups, newGroupName.trim()].sort())
-														}
-													}
-												} else if (e.key === 'Escape') {
-													setShowNewGroupInput(false)
-													setNewGroupName('')
-												}
-											}}
-											autoFocus
-										/>
-										<Button
-											type="button"
-											className="btn-primary btn-sm"
-											onClick={() => {
-												if (newGroupName.trim()) {
-													setFormData({ ...formData, baseGroup: newGroupName.trim() })
-													setShowNewGroupInput(false)
-													setNewGroupName('')
-													// Add to available groups if not already there
-													if (!availableGroups.includes(newGroupName.trim())) {
-														setAvailableGroups([...availableGroups, newGroupName.trim()].sort())
-													}
-												}
-											}}
-										>
-											Add
-										</Button>
-										<Button
-											type="button"
-											className="btn-ghost btn-sm"
-											onClick={() => {
-												setShowNewGroupInput(false)
-												setNewGroupName('')
-											}}
-										>
-											Cancel
-										</Button>
-									</div>
-								)}
+										</>
+									)}
+								</div>
 								<label className="label">
 									<span className="label-text-alt text-base-content/50">
-										Assign this couple to an age-based group for group lessons
+										Select one or more groups for this couple. Couples can be in multiple groups.
 									</span>
 								</label>
 							</div>
@@ -965,53 +1071,167 @@ export default function CouplesPage() {
 				</div>
 			)}
 
-			{/* Delete Group Confirmation Modal */}
-			{groupToDelete && (
-				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-					<div className="w-full max-w-md rounded-2xl bg-base-200 shadow-2xl border border-base-300">
-						<div className="flex items-center justify-between border-b border-base-300 px-6 py-4">
-							<h3 className="text-lg font-semibold text-base-content">Confirm Delete Group</h3>
+
+			{/* Create/Edit Group Modal */}
+			{isGroupModalOpen && (
+				<div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4">
+					<div className="w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl bg-base-200 shadow-2xl border border-base-300 max-h-[90vh] flex flex-col">
+						{/* Mobile drag indicator */}
+						<div className="flex justify-center pt-2 sm:hidden">
+							<div className="w-12 h-1.5 bg-base-300 rounded-full" />
+						</div>
+						
+						<div className="flex items-center justify-between border-b border-base-300 px-4 sm:px-6 py-3 sm:py-4">
+							<h3 className="text-lg font-semibold text-base-content">
+								{editingGroup ? 'Edit Group' : 'Create New Group'}
+							</h3>
 							<button
 								type="button"
-								className="btn btn-ghost btn-sm"
-								onClick={() => setGroupToDelete(null)}
+								className="btn btn-ghost btn-sm btn-circle"
+								onClick={handleCloseGroupModal}
 							>
 								✕
 							</button>
 						</div>
-						<div className="p-6">
-							<p className="text-base-content mb-4">
-								Are you sure you want to delete the group <strong>"{groupToDelete}"</strong>?
-							</p>
-							<p className="text-sm text-base-content/60 mb-6">
-								This will remove the group assignment from {groupCounts[groupToDelete] || 0} couple{groupCounts[groupToDelete] !== 1 ? 's' : ''}. 
-								The couples themselves will not be deleted, only their group assignment.
-							</p>
-							<div className="flex justify-end gap-3">
+
+						<form onSubmit={handleCreateOrUpdateGroup} className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+							<div className="form-control">
+								<label className="label">
+									<span className="label-text">Group Name *</span>
+								</label>
+								<input
+									type="text"
+									className="input input-bordered w-full"
+									placeholder="e.g., Beginners, Intermediate, Advanced"
+									value={groupFormData.name}
+									onChange={(e) => setGroupFormData({ ...groupFormData, name: e.target.value })}
+									required
+									disabled={creatingGroup}
+								/>
+							</div>
+
+							<div className="form-control">
+								<label className="label">
+									<span className="label-text">Description</span>
+								</label>
+								<textarea
+									className="textarea textarea-bordered w-full"
+									placeholder="Add a description for this group (optional)..."
+									rows={3}
+									value={groupFormData.description}
+									onChange={(e) => setGroupFormData({ ...groupFormData, description: e.target.value })}
+									disabled={creatingGroup}
+								/>
+							</div>
+
+							<div className="form-control">
+								<label className="label">
+									<span className="label-text">Assign Couples</span>
+									<span className="label-text-alt">
+										{selectedCouplesForGroup.size} of {pairs.length} selected
+									</span>
+								</label>
+								<div className="max-h-64 overflow-y-auto border border-base-300 rounded-lg p-3 space-y-2">
+									{pairs.length === 0 ? (
+										<p className="text-base-content/60 text-sm text-center py-4">
+											No couples available. Create couples first.
+										</p>
+									) : (
+										<>
+											<div className="flex items-center gap-2 pb-2 border-b border-base-300 mb-2 sticky top-0 bg-base-200">
+												<input
+													type="checkbox"
+													className="checkbox checkbox-sm"
+													checked={selectedCouplesForGroup.size === pairs.length && pairs.length > 0}
+													onChange={(e) => {
+														if (e.target.checked) {
+															setSelectedCouplesForGroup(new Set(pairs.map(p => p._id)))
+														} else {
+															setSelectedCouplesForGroup(new Set())
+														}
+													}}
+													disabled={creatingGroup}
+												/>
+												<span className="text-sm font-medium">Select All</span>
+											</div>
+											{pairs.map((pair) => (
+												<label
+													key={pair._id}
+													className="flex items-center gap-3 p-2 rounded-lg hover:bg-base-300/50 cursor-pointer"
+												>
+													<input
+														type="checkbox"
+														className="checkbox checkbox-sm"
+														checked={selectedCouplesForGroup.has(pair._id)}
+														onChange={(e) => {
+															const newSet = new Set(selectedCouplesForGroup)
+															if (e.target.checked) {
+																newSet.add(pair._id)
+															} else {
+																newSet.delete(pair._id)
+															}
+															setSelectedCouplesForGroup(newSet)
+														}}
+														disabled={creatingGroup}
+													/>
+													<span className="flex-1">
+														{getStudentName(pair.studentAId)} & {getStudentName(pair.studentBId)}
+													</span>
+													{pair.baseGroups && pair.baseGroups.length > 0 && (
+														<div className="flex gap-1 flex-wrap">
+															{pair.baseGroups.map(g => {
+																const group = availableGroups.find(gr => gr._id === g)
+																return group ? (
+																	<span key={g} className="badge badge-outline badge-xs">{group.name}</span>
+																) : (
+																	<span key={g} className="badge badge-outline badge-xs">{g}</span>
+																)
+															})}
+														</div>
+													)}
+												</label>
+											))}
+										</>
+									)}
+								</div>
+								<label className="label">
+									<span className="label-text-alt text-base-content/50">
+										Select couples to add to this group. You can assign couples later when editing.
+									</span>
+								</label>
+							</div>
+
+							{groupError && (
+								<Alert variant="error">
+									{groupError}
+								</Alert>
+							)}
+
+							<div className="flex justify-end gap-3 pt-4 border-t border-base-300">
 								<Button
 									type="button"
 									className="btn-secondary"
-									onClick={() => setGroupToDelete(null)}
+									onClick={handleCloseGroupModal}
+									disabled={creatingGroup}
 								>
 									Cancel
 								</Button>
 								<Button
-									type="button"
-									className="btn-error"
-									onClick={() => handleDeleteGroup(groupToDelete)}
-									disabled={deletingGroup === groupToDelete}
+									type="submit"
+									className="btn-primary"
+									disabled={creatingGroup || !groupFormData.name.trim()}
 								>
-									{deletingGroup === groupToDelete ? (
+									{creatingGroup ? (
 										<>
 											<span className="loading loading-spinner loading-sm"></span>
-											Deleting...
+											{editingGroup ? 'Updating...' : 'Creating...'}
 										</>
 									) : (
-										'Delete Group'
+										editingGroup ? 'Update Group' : 'Create Group'
 									)}
 								</Button>
 							</div>
-						</div>
+						</form>
 					</div>
 				</div>
 			)}
@@ -1069,6 +1289,7 @@ export default function CouplesPage() {
 					</div>
 				</div>
 			)}
+
 		</div>
 	)
 }

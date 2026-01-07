@@ -26,7 +26,8 @@ export interface IPair extends Document {
 	studentAId: Types.ObjectId
 	studentBId: Types.ObjectId
 	preferredTeacherId?: Types.ObjectId
-	baseGroup?: string // e.g., 'juniors1', 'juniors2', 'intermediates', 'advanced'
+	baseGroup?: string // Legacy field for backward compatibility
+	baseGroups?: string[] // Array of groups (e.g., ['juniors1', 'intermediates'])
 	unavailability?: IWeeklyAvailability // Calculated union of both partners' unavailability
 	createdAt?: Date
 	updatedAt?: Date
@@ -67,7 +68,8 @@ const PairSchema = new Schema<IPair>(
 		studentAId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
 		studentBId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
 		preferredTeacherId: { type: Schema.Types.ObjectId, ref: 'User' },
-		baseGroup: { type: String, required: false },
+		baseGroup: { type: String, required: false }, // Legacy field for backward compatibility
+		baseGroups: [{ type: String }], // Array of groups
 		unavailability: { type: UnavailabilitySchema, required: false },
 	},
 	{ timestamps: true },
