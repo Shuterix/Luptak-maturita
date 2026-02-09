@@ -32,6 +32,26 @@ export default function LoginForm() {
 			passwordRef.current.setAttribute('data-lpignore', 'true')
 			passwordRef.current.setAttribute('data-bwignore', 'true')
 			passwordRef.current.setAttribute('data-protonpass-ignore', 'true')
+			// Google Password Manager specific attributes
+			passwordRef.current.setAttribute('data-google-password-manager-ignore', 'true')
+			passwordRef.current.setAttribute('data-google-password-manager-disabled', 'true')
+			// Additional attributes to prevent password breach warnings
+			passwordRef.current.setAttribute('data-password-manager', 'disabled')
+			passwordRef.current.setAttribute('data-pm-ignore', 'true')
+			
+			// Set readonly initially to prevent password manager detection, remove on first interaction
+			passwordRef.current.setAttribute('readonly', 'readonly')
+			const removeReadonly = () => {
+				if (passwordRef.current) {
+					passwordRef.current.removeAttribute('readonly')
+				}
+			}
+			
+			// Remove readonly on any interaction
+			passwordRef.current.addEventListener('mousedown', removeReadonly, { once: true })
+			passwordRef.current.addEventListener('touchstart', removeReadonly, { once: true })
+			passwordRef.current.addEventListener('focus', removeReadonly, { once: true })
+			passwordRef.current.addEventListener('keydown', removeReadonly, { once: true })
 		}
 	}, [])
 
@@ -41,7 +61,15 @@ export default function LoginForm() {
 	}
 
 	return (
-		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4" autoComplete="off" data-form-type="other" noValidate>
+		<form 
+			onSubmit={handleSubmit(onSubmit)} 
+			className="space-y-4" 
+			autoComplete="off" 
+			data-form-type="other"
+			data-google-password-manager-ignore="true"
+			data-password-manager="disabled"
+			noValidate
+		>
 			<div className="form-control">
 				<label className="label">
 					<span className="label-text text-sm">Email</span>
@@ -79,9 +107,12 @@ export default function LoginForm() {
 					className="input input-bordered"
 					inputMode="text"
 					autoCapitalize="none"
-					autoComplete="current-password"
+					autoComplete="off"
 					spellCheck={false}
 					maxLength={128}
+					data-form-type="other"
+					data-google-password-manager-ignore="true"
+					data-password-manager="disabled"
 					{...passwordRegister}
 					ref={(e) => {
 						passwordRegister.ref(e)

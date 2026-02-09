@@ -71,7 +71,7 @@ export async function PATCH(
 		}
 
 		const body = await request.json()
-		const { partnerId, profile, ...otherFields } = body
+		const { partnerId, profile, firstName, lastName, ...otherFields } = body
 
 		// Only allow specific fields to be updated
 		const updateData: any = {}
@@ -84,8 +84,16 @@ export async function PATCH(
 			updateData.profile = profile
 		}
 
+		if (firstName !== undefined) {
+			updateData.firstName = firstName
+		}
+
+		if (lastName !== undefined) {
+			updateData.lastName = lastName
+		}
+
 		// Prevent updating sensitive fields via this endpoint
-		const allowedFields = ['profile', 'partnerId']
+		const allowedFields = ['profile', 'partnerId', 'firstName', 'lastName']
 		for (const key of Object.keys(otherFields)) {
 			if (allowedFields.includes(key)) {
 				updateData[key] = otherFields[key]

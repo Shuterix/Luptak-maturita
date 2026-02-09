@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import axios from 'axios'
 import { useRouter } from 'next/navigation'
 import { showAlertToast } from '@/components/toast/Toast'
@@ -22,6 +22,7 @@ interface AuthContextType {
 	refreshUser: () => Promise<void>
 	isLoading: boolean
 	error: string | null
+	isLoggingOut: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -30,9 +31,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 	const [user, setUser] = useState<User | null>(null)
 	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const [isLoggingOut, setIsLoggingOut] = useState(false)
+	const isLoggingOutRef = useRef(false)
 	const router = useRouter()
 
 	const refreshUser = async () => {
+		// Don't try to refresh if we're in the process of logging out
+		if (isLoggingOutRef.current) {
+			return
+		}
+		
+		// Don't try to refresh if there's no stored session (user explicitly logged out)
+		const storedUser = localStorage.getItem('dancehub_USER')
+		if (!storedUser || storedUser === 'undefined') {
+			return
+		}
+		
 		try {
 			const { data } = await axios.get('/api/users/me')
 			const normalizedUser: User | null = data.user
@@ -43,8 +57,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 				: null
 			setUser(normalizedUser)
 			localStorage.setItem('dancehub_USER', JSON.stringify(normalizedUser))
-		} catch (err) {
-			console.error('Failed to fetch user', err)
+		} catch (err: any) {
+			// Only log error if it's not a 401 (expected when session expires or user logged out)
+			if (err?.response?.status !== 401) {
+				console.error('Failed to fetch user', err)
+			}
 			setUser(null)
 			localStorage.removeItem('dancehub_USER')
 		}
@@ -114,26 +131,50 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 	const logout = async () => {
 		try {
+			// Set logging out flag to prevent any refresh attempts
+			isLoggingOutRef.current = true
+			setIsLoggingOut(true)
+			
 			// Clear state immediately for faster UI response
 			setUser(null)
 			localStorage.removeItem('dancehub_USER')
 			
-			// Logout API call (non-blocking)
-			axios.get('/api/auth/logout').catch(console.error)
+			// Also manually delete cookies on client side as backup
+			if (typeof document !== 'undefined') {
+				document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+				document.cookie = 'onboardingStep=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+				document.cookie = 'role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+			}
 			
-			// Use window.location for production compatibility (Netlify)
-			// router.replace doesn't always work on production builds
+			// Wait for logout API call to clear cookies on server side
+			try {
+				await axios.get('/api/auth/logout')
+			} catch (err) {
+				// Silently ignore logout API errors, but still proceed with redirect
+				console.warn('Logout API call failed, proceeding anyway:', err)
+			}
+			
+			// Use window.location.replace for a hard redirect that clears history
+			// This ensures we navigate away and cookies are cleared
+			// The replace method doesn't add to history, so back button won't work
 			if (typeof window !== 'undefined') {
-				window.location.href = '/auth/login'
+				// Small delay to ensure cookies are processed by the browser
+				setTimeout(() => {
+					window.location.replace('/auth/login')
+				}, 100)
 			}
 		} catch (err) {
 			console.error(err)
 			showAlertToast('Logout failed', { variant: 'error', title: 'Error' })
+			// Still try to redirect even if there's an error
+			if (typeof window !== 'undefined') {
+				window.location.replace('/auth/login')
+			}
 		}
 	}
 
 	return (
-		<AuthContext.Provider value={{ user, login, logout, refreshUser, isLoading, error }}>
+		<AuthContext.Provider value={{ user, login, logout, refreshUser, isLoading, error, isLoggingOut }}>
 			{children}
 		</AuthContext.Provider>
 	)

@@ -34,10 +34,35 @@ interface GroupData {
 	updatedAt?: string
 }
 
+interface PairData {
+	_id: string
+	studentAId: {
+		_id: string
+		firstName: string
+		lastName: string
+		email: string
+	}
+	studentBId: {
+		_id: string
+		firstName: string
+		lastName: string
+		email: string
+	}
+	preferredTeacherId?: {
+		_id: string
+		firstName: string
+		lastName: string
+	}
+	baseGroup?: string
+	baseGroups?: string[]
+	createdAt?: string
+}
+
 export default function ClubOverviewPage() {
 	const { user } = useAuth()
 	const [students, setStudents] = useState<UserData[]>([])
 	const [trainers, setTrainers] = useState<UserData[]>([])
+	const [pairs, setPairs] = useState<PairData[]>([])
 	const [club, setClub] = useState<ClubData | null>(null)
 	const [groups, setGroups] = useState<GroupData[]>([])
 	const [loading, setLoading] = useState(true)
@@ -64,18 +89,20 @@ export default function ClubOverviewPage() {
 			}
 
 			// Fetch all data in parallel for faster loading
-			const [clubRes, studentsRes, trainersRes, groupsRes] = await Promise.all([
+			const [clubRes, studentsRes, trainersRes, pairsRes, groupsRes] = await Promise.all([
 				fetch(`/api/clubs/${user.clubId}`, { cache: 'no-store' }),
 				fetch(`/api/users?clubId=${user.clubId}&role=student`, { cache: 'no-store' }),
 				fetch(`/api/users?clubId=${user.clubId}&role=trainer`, { cache: 'no-store' }),
+				fetch('/api/pairs', { cache: 'no-store' }),
 				fetch('/api/groups', { cache: 'no-store' }),
 			])
 
 			// Process responses in parallel
-			const [clubData, studentsData, trainersData, groupsData] = await Promise.all([
+			const [clubData, studentsData, trainersData, pairsData, groupsData] = await Promise.all([
 				clubRes.ok ? clubRes.json() : null,
 				studentsRes.ok ? studentsRes.json() : null,
 				trainersRes.ok ? trainersRes.json() : null,
+				pairsRes.ok ? pairsRes.json() : null,
 				groupsRes.ok ? groupsRes.json() : null,
 			])
 
@@ -96,6 +123,10 @@ export default function ClubOverviewPage() {
 				setTrainers(trainersData.users)
 			} else if (!trainersRes.ok) {
 				throw new Error('Failed to fetch trainers')
+			}
+
+			if (pairsData?.pairs) {
+				setPairs(pairsData.pairs)
 			}
 
 			if (groupsData?.groups) {
@@ -177,6 +208,86 @@ export default function ClubOverviewPage() {
 									<div className="flex items-center gap-2">
 										<Phone className="h-4 w-4 flex-shrink-0" />
 										<span>{userData.profile.phone}</span>
+									</div>
+								)}
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		)
+	}
+
+	const PairCard = ({ pairData, groups }: { pairData: PairData; groups: GroupData[] }) => {
+		const studentAName = `${pairData.studentAId.firstName} ${pairData.studentAId.lastName}`
+		const studentBName = `${pairData.studentBId.firstName} ${pairData.studentBId.lastName}`
+		const teacherName = pairData.preferredTeacherId 
+			? `${pairData.preferredTeacherId.firstName} ${pairData.preferredTeacherId.lastName}`
+			: null
+
+		// Create a mapping from group ID to group name
+		const groupMap = new Map(groups.map(g => [g._id, g.name]))
+		
+		// Get group names from IDs
+		const getGroupNames = () => {
+			if (pairData.baseGroups && pairData.baseGroups.length > 0) {
+				// Map group IDs to names
+				const names = pairData.baseGroups
+					.map(groupId => {
+						// Try to find by ID first
+						const group = groupMap.get(groupId)
+						if (group) return group
+						// If not found by ID, check if it's already a name (legacy support)
+						// Check if any group has this as a name
+						const groupByName = groups.find(g => g.name === groupId)
+						return groupByName ? groupByName.name : groupId
+					})
+					.filter(Boolean)
+				return names.length > 0 ? names.join(', ') : null
+			}
+			// Handle legacy baseGroup field
+			if (pairData.baseGroup) {
+				// Check if it's an ID or a name
+				const group = groupMap.get(pairData.baseGroup)
+				return group || pairData.baseGroup
+			}
+			return null
+		}
+
+		const groupNames = getGroupNames()
+
+		return (
+			<div className="card bg-base-100 shadow-md border border-base-300 hover:shadow-lg transition-shadow">
+				<div className="card-body p-4">
+					<div className="flex items-start justify-between gap-3">
+						<div className="flex-1 min-w-0">
+							<div className="flex items-center gap-2 mb-2">
+								<Heart className="h-4 w-4 text-accent flex-shrink-0" />
+								<h3 className="font-semibold text-base">Couple</h3>
+							</div>
+							<div className="space-y-2 text-sm">
+								<div className="flex flex-col gap-1">
+									<div className="flex items-center gap-2">
+										<span className="text-base-content/60">Partner A:</span>
+										<span className="font-medium">{studentAName}</span>
+									</div>
+									<div className="flex items-center gap-2">
+										<span className="text-base-content/60">Partner B:</span>
+										<span className="font-medium">{studentBName}</span>
+									</div>
+								</div>
+								{teacherName && (
+									<div className="flex items-center gap-2 pt-1 border-t border-base-300">
+										<UserCheck className="h-3 w-3 text-primary flex-shrink-0" />
+										<span className="text-base-content/60">Preferred Teacher:</span>
+										<span className="font-medium">{teacherName}</span>
+									</div>
+								)}
+								{groupNames && (
+									<div className="flex items-center gap-2 pt-1 border-t border-base-300">
+										<UsersRound className="h-3 w-3 text-info flex-shrink-0" />
+										<span className="text-base-content/60">Group(s):</span>
+										<span className="font-medium">{groupNames}</span>
 									</div>
 								)}
 							</div>
@@ -383,6 +494,28 @@ export default function ClubOverviewPage() {
 									</div>
 								</div>
 							</div>
+						))}
+					</div>
+				)}
+			</section>
+
+			{/* Pairs Section */}
+			<section>
+				<div className="flex items-center gap-2 mb-4">
+					<Heart className="h-5 w-5 text-accent" />
+					<h2 className="text-xl font-semibold">Pairs</h2>
+					<span className="badge badge-outline">{pairs.length}</span>
+				</div>
+				{pairs.length === 0 ? (
+					<div className="card bg-base-100 border border-base-300">
+						<div className="card-body text-center py-8">
+							<p className="text-base-content/60">No pairs found in your club.</p>
+						</div>
+					</div>
+				) : (
+					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+						{pairs.map((pair) => (
+							<PairCard key={pair._id} pairData={pair} groups={groups} />
 						))}
 					</div>
 				)}

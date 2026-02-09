@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { Button, Input, Alert } from '@/components'
 import { showAlertToast } from '@/components/toast/Toast'
-import { Clock, User, Users, Calendar, Save } from 'lucide-react'
+import ResponsiveModal from '@/components/ResponsiveModal'
+import { Clock, User, Users, Calendar, Save, ChevronDown, ChevronUp, Edit2 } from 'lucide-react'
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
 
@@ -65,11 +66,25 @@ export default function StudentSettingsPage() {
 	const [unavailability, setUnavailability] = useState<WeeklyAvailability>({})
 	const [pairs, setPairs] = useState<StudentPair[]>([])
 	const [currentPairId, setCurrentPairId] = useState<string | null>(null)
+	
+	// Modal and UI state
+	const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false)
+	const [selectedDay, setSelectedDay] = useState<DayOfWeek | null>(null)
+	
+	// Profile editing state
+	const [editingName, setEditingName] = useState(false)
+	const [firstName, setFirstName] = useState('')
+	const [lastName, setLastName] = useState('')
+	const [phoneNumber, setPhoneNumber] = useState('')
+	const [savingProfile, setSavingProfile] = useState(false)
 
 	// Load user data and availability
 	useEffect(() => {
 		if (user) {
 			loadStudentData()
+			setFirstName(user.firstName || '')
+			setLastName(user.lastName || '')
+			setPhoneNumber(user.profile?.phone || '')
 		}
 	}, [user])
 
@@ -178,6 +193,60 @@ export default function StudentSettingsPage() {
 		}
 	}
 
+	// When modal opens, select first day with unavailability or Monday
+	useEffect(() => {
+		if (isAvailabilityModalOpen && !selectedDay) {
+			const daysWithUnavailability = (Object.keys(DAY_LABELS) as DayOfWeek[]).find(
+				day => unavailability[day] && unavailability[day]!.length > 0
+			)
+			setSelectedDay(daysWithUnavailability || 'monday')
+		}
+	}, [isAvailabilityModalOpen, selectedDay, unavailability])
+
+	const handleSaveProfile = async (saveName = false, savePhone = false) => {
+		if (!user?._id) return
+
+		setSavingProfile(true)
+		try {
+			const updateData: any = {}
+			
+			if (saveName) {
+				updateData.firstName = firstName.trim()
+				updateData.lastName = lastName.trim()
+			}
+			
+			if (savePhone) {
+				updateData.profile = {
+					phone: phoneNumber.trim(),
+				}
+			}
+
+			const res = await fetch(`/api/users/${user._id}`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(updateData),
+			})
+
+			if (res.ok) {
+				showAlertToast('Profile updated successfully', { variant: 'success' })
+				await refreshUser()
+				if (saveName) {
+					setEditingName(false)
+				}
+			} else {
+				const data = await res.json()
+				showAlertToast(data.error || 'Failed to update profile', { variant: 'error' })
+			}
+		} catch (err) {
+			console.error('Error updating profile:', err)
+			showAlertToast('Failed to update profile', { variant: 'error' })
+		} finally {
+			setSavingProfile(false)
+		}
+	}
+
 
 	if (!user || user.role !== 'student') {
 		return (
@@ -217,76 +286,149 @@ export default function StudentSettingsPage() {
 				</Alert>
 			)}
 
-			{/* Weekly Unavailability Section */}
+			{/* Weekly Unavailability Section - Button to open modal */}
 			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
 				<div className="card-body">
-					<h2 className="card-title flex items-center gap-2 mb-4">
-						<Clock className="h-5 w-5" />
-						Weekly Unavailability
-					</h2>
-					<p className="text-sm text-base-content/70 mb-6">
+					<div className="flex items-center justify-between">
+						<div>
+							<h2 className="card-title flex items-center gap-2 mb-2">
+								<Clock className="h-5 w-5" />
+								Weekly Unavailability
+							</h2>
+							<p className="text-sm text-base-content/70">
+								Set the times when you <strong>CANNOT</strong> train (e.g., school hours, work).
+							</p>
+						</div>
+						<Button
+							type="button"
+							className="btn-primary"
+							onClick={() => setIsAvailabilityModalOpen(true)}
+						>
+							<Clock className="h-4 w-4" />
+							Edit Availability
+						</Button>
+					</div>
+				</div>
+			</div>
+
+			{/* Availability Modal */}
+			<ResponsiveModal
+				isOpen={isAvailabilityModalOpen}
+				onClose={() => {
+					setIsAvailabilityModalOpen(false)
+					setSelectedDay(null)
+				}}
+				title="Weekly Unavailability"
+				size="xl"
+			>
+				<div className="space-y-4">
+					<p className="text-sm text-base-content/70 mb-4">
 						Set the times when you <strong>CANNOT</strong> train (e.g., school hours, work). 
 						Leave empty if you're available anytime. Teachers will schedule your lessons outside these times.
 					</p>
 
-					<div className="space-y-6">
-						{(Object.keys(DAY_LABELS) as DayOfWeek[]).map((day) => (
-							<div key={day} className="border-b border-base-300 pb-4 last:border-b-0">
-								<div className="flex items-center justify-between mb-3">
-									<h3 className="font-semibold text-base-content">{DAY_LABELS[day]}</h3>
-									<Button
-										type="button"
-										className="btn-sm btn-outline"
-										onClick={() => addTimeWindow(day)}
-									>
-										+ Add Unavailable Time
-									</Button>
-								</div>
-
-								{(!unavailability[day] || unavailability[day]!.length === 0) && (
-									<p className="text-sm text-success/70 italic">
-										✓ Available all day
-									</p>
-								)}
-
-								<div className="space-y-3">
-									{unavailability[day]?.map((window, index) => (
-										<div key={index} className="flex items-center gap-3 flex-wrap bg-error/5 p-2 rounded-lg border border-error/20">
-											<span className="text-error/70 text-sm">Cannot train:</span>
-											<Input
-												type="time"
-												label="From"
-												value={window.start}
-												onChange={(e) => updateTimeWindow(day, index, 'start', e.target.value)}
-												className="flex-1 min-w-[120px]"
-											/>
-											<span className="text-base-content/60">to</span>
-											<Input
-												type="time"
-												label="Until"
-												value={window.end}
-												onChange={(e) => updateTimeWindow(day, index, 'end', e.target.value)}
-												className="flex-1 min-w-[120px]"
-											/>
-											<Button
-												type="button"
-												className="btn-sm btn-ghost text-error"
-												onClick={() => removeTimeWindow(day, index)}
-											>
-												Remove
-											</Button>
-										</div>
-									))}
-								</div>
-							</div>
-						))}
+					{/* Day Selector Dropdown */}
+					<div>
+						<label className="label">
+							<span className="label-text font-medium flex items-center gap-2">
+								<Calendar className="h-4 w-4" />
+								Select Day to Edit
+							</span>
+						</label>
+						<select
+							value={selectedDay || ''}
+							onChange={(e) => setSelectedDay(e.target.value as DayOfWeek)}
+							className="select select-bordered w-full"
+						>
+							<option value="">Choose a day...</option>
+							{(Object.keys(DAY_LABELS) as DayOfWeek[]).map((day) => (
+								<option key={day} value={day}>
+									{DAY_LABELS[day]}
+									{unavailability[day] && unavailability[day]!.length > 0 && (
+										` (${unavailability[day]!.length} time${unavailability[day]!.length !== 1 ? 's' : ''})`
+									)}
+								</option>
+							))}
+						</select>
 					</div>
 
-					<div className="mt-6 flex justify-end">
+					{/* Selected Day's Time Windows */}
+					{selectedDay && (
+						<div className="border border-base-300 rounded-lg p-4 bg-base-200">
+							<div className="flex items-center justify-between mb-4">
+								<h3 className="font-semibold text-lg text-base-content">
+									{DAY_LABELS[selectedDay]}
+								</h3>
+								<Button
+									type="button"
+									className="btn-sm btn-primary"
+									onClick={() => addTimeWindow(selectedDay)}
+								>
+									+ Add Time Window
+								</Button>
+							</div>
+
+							{(!unavailability[selectedDay] || unavailability[selectedDay]!.length === 0) && (
+								<p className="text-sm text-success/70 italic mb-4">
+									✓ Available all day
+								</p>
+							)}
+
+							<div className="space-y-3">
+								{unavailability[selectedDay]?.map((window, index) => (
+									<div key={index} className="flex items-center gap-3 flex-wrap bg-error/5 p-3 rounded-lg border border-error/20">
+										<span className="text-error/70 text-sm font-medium">Cannot train:</span>
+										<Input
+											type="time"
+											label="From"
+											value={window.start}
+											onChange={(e) => updateTimeWindow(selectedDay, index, 'start', e.target.value)}
+											className="flex-1 min-w-[120px]"
+										/>
+										<span className="text-base-content/60">to</span>
+										<Input
+											type="time"
+											label="Until"
+											value={window.end}
+											onChange={(e) => updateTimeWindow(selectedDay, index, 'end', e.target.value)}
+											className="flex-1 min-w-[120px]"
+										/>
+										<Button
+											type="button"
+											className="btn-sm btn-ghost text-error"
+											onClick={() => removeTimeWindow(selectedDay, index)}
+										>
+											Remove
+										</Button>
+									</div>
+								))}
+							</div>
+						</div>
+					)}
+
+					{!selectedDay && (
+						<div className="alert alert-info">
+							<Calendar className="h-5 w-5" />
+							<span>Please select a day from the dropdown above to edit its availability.</span>
+						</div>
+					)}
+
+					<div className="mt-6 flex justify-end gap-3">
+						<Button
+							type="button"
+							className="btn-ghost"
+							onClick={() => setIsAvailabilityModalOpen(false)}
+						>
+							Cancel
+						</Button>
 						<Button
 							type="button"
 							className="btn-primary"
-							onClick={handleSaveUnavailability}
+							onClick={async () => {
+								await handleSaveUnavailability()
+								setIsAvailabilityModalOpen(false)
+								setSelectedDay(null)
+							}}
 							disabled={saving}
 						>
 							{saving ? (
@@ -303,7 +445,7 @@ export default function StudentSettingsPage() {
 						</Button>
 					</div>
 				</div>
-			</div>
+			</ResponsiveModal>
 
 			{/* Partner Status Section */}
 			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
@@ -374,62 +516,109 @@ export default function StudentSettingsPage() {
 						</div>
 
 						<div>
-							<label className="label">
-								<span className="label-text font-medium">Name</span>
-							</label>
-							<div className="grid grid-cols-2 gap-3">
-								<Input
-									type="text"
-									value={user.firstName || ''}
-									disabled
-									className="bg-base-200"
-									placeholder="First Name"
-								/>
-								<Input
-									type="text"
-									value={user.lastName || ''}
-									disabled
-									className="bg-base-200"
-									placeholder="Last Name"
-								/>
+							<div className="flex items-center justify-between mb-2">
+								<label className="label">
+									<span className="label-text font-medium">Name</span>
+								</label>
+								{!editingName && (
+									<Button
+										type="button"
+										className="btn-sm btn-ghost"
+										onClick={() => setEditingName(true)}
+									>
+										<Edit2 className="h-4 w-4" />
+										Edit
+									</Button>
+								)}
 							</div>
-							<p className="text-xs text-base-content/50 mt-1">
-								Name changes require administrator approval
-							</p>
+							{editingName ? (
+								<div className="space-y-3">
+									<div className="grid grid-cols-2 gap-3">
+										<Input
+											type="text"
+											value={firstName}
+											onChange={(e) => setFirstName(e.target.value)}
+											placeholder="First Name"
+										/>
+										<Input
+											type="text"
+											value={lastName}
+											onChange={(e) => setLastName(e.target.value)}
+											placeholder="Last Name"
+										/>
+									</div>
+									<div className="flex gap-2">
+										<Button
+											type="button"
+											className="btn-sm btn-primary"
+											onClick={() => handleSaveProfile(true, false)}
+											disabled={savingProfile}
+										>
+											{savingProfile ? (
+												<span className="loading loading-spinner loading-sm"></span>
+											) : (
+												'Save'
+											)}
+										</Button>
+										<Button
+											type="button"
+											className="btn-sm btn-ghost"
+											onClick={() => {
+												setEditingName(false)
+												setFirstName(user.firstName || '')
+												setLastName(user.lastName || '')
+											}}
+											disabled={savingProfile}
+										>
+											Cancel
+										</Button>
+									</div>
+								</div>
+							) : (
+								<div className="grid grid-cols-2 gap-3">
+									<Input
+										type="text"
+										value={user.firstName || ''}
+										disabled
+										className="bg-base-200"
+										placeholder="First Name"
+									/>
+									<Input
+										type="text"
+										value={user.lastName || ''}
+										disabled
+										className="bg-base-200"
+										placeholder="Last Name"
+									/>
+								</div>
+							)}
 						</div>
 
 						<div>
 							<label className="label">
 								<span className="label-text font-medium">Phone Number</span>
 							</label>
-							<Input
-								type="tel"
-								defaultValue={user.profile?.phone || ''}
-								placeholder="+1 (555) 123-4567"
-								className="w-full"
-								onBlur={async (e) => {
-									if (!user?._id) return
-									try {
-										const res = await fetch(`/api/users/${user._id}`, {
-											method: 'PATCH',
-											headers: {
-												'Content-Type': 'application/json',
-											},
-											body: JSON.stringify({
-												profile: {
-													phone: e.target.value,
-												},
-											}),
-										})
-										if (res.ok) {
-											showAlertToast('Phone number updated', { variant: 'success' })
-											await refreshUser()
-										}
-									} catch (err) {
-										console.error('Error updating phone:', err)
-									}
-								}}
-							/>
+							<div className="flex gap-2">
+								<Input
+									type="tel"
+									value={phoneNumber}
+									onChange={(e) => setPhoneNumber(e.target.value)}
+									placeholder="+1 (555) 123-4567"
+									className="flex-1"
+								/>
+								<Button
+									type="button"
+									className="btn-primary"
+									onClick={() => handleSaveProfile(false, true)}
+									disabled={savingProfile || phoneNumber === (user.profile?.phone || '')}
+								>
+									{savingProfile ? (
+										<span className="loading loading-spinner loading-sm"></span>
+									) : (
+										'Save'
+									)}
+								</Button>
+							</div>
 						</div>
 					</div>
 				</div>

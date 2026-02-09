@@ -448,7 +448,7 @@ const convertFromTimetableLesson = (lesson: TimetableLesson): LessonForm => {
 }
 
 export function TimetableManager() {
-	const { user, refreshUser } = useAuth()
+	const { user, refreshUser, isLoggingOut } = useAuth()
 	const [loadingUser, setLoadingUser] = useState(false)
 	const [timetables, setTimetables] = useState<TimetableRecord[]>([])
 	const [selectedTimetableId, setSelectedTimetableId] = useState<string | null>(null)
@@ -523,11 +523,12 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 	}, [user, form])
 
 	useEffect(() => {
-		if (!user) {
+		// Don't try to refresh user if we're logging out
+		if (!user && !isLoggingOut) {
 			setLoadingUser(true)
 			refreshUser().finally(() => setLoadingUser(false))
 		}
-	}, [user, refreshUser])
+	}, [user, refreshUser, isLoggingOut])
 
 	const fetchTimetables = async (clubId: string) => {
 		setLoadingTimetables(true)
@@ -660,12 +661,13 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 	}
 
 	useEffect(() => {
-		if (user?.clubId && !viewingTimetableId) {
+		// Don't fetch data if we're logging out
+		if (user?.clubId && !viewingTimetableId && !isLoggingOut) {
 			fetchTimetables(user.clubId)
 			fetchDbCouples()
 			fetchDbTeachers()
 		}
-	}, [user?.clubId, viewingTimetableId])
+	}, [user?.clubId, viewingTimetableId, isLoggingOut])
 
 	// Keep ref in sync with state
 	useEffect(() => {

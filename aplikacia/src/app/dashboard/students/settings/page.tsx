@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { Button, Input, Alert } from '@/components'
 import { showAlertToast } from '@/components/toast/Toast'
-import { Clock, User, Users, Calendar, Save } from 'lucide-react'
+import ResponsiveModal from '@/components/ResponsiveModal'
+import { Clock, User, Users, Calendar, Save, ChevronDown, ChevronUp, Edit2 } from 'lucide-react'
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
 
@@ -65,6 +66,17 @@ export default function StudentSettingsPage() {
 	const [unavailability, setUnavailability] = useState<WeeklyAvailability>({})
 	const [pairs, setPairs] = useState<StudentPair[]>([])
 	const [currentPairId, setCurrentPairId] = useState<string | null>(null)
+	
+	// Modal and UI state
+	const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false)
+	const [expandedDays, setExpandedDays] = useState<Set<DayOfWeek>>(new Set())
+	
+	// Profile editing state
+	const [editingName, setEditingName] = useState(false)
+	const [firstName, setFirstName] = useState('')
+	const [lastName, setLastName] = useState('')
+	const [phoneNumber, setPhoneNumber] = useState('')
+	const [savingProfile, setSavingProfile] = useState(false)
 
 	// Load user data and availability
 	useEffect(() => {

@@ -6,7 +6,6 @@ import {
 	Settings,
 	LogOut,
 	HelpCircle,
-	Shield,
 	CircleUser,
 	Users,
 	Calendar,
@@ -16,6 +15,7 @@ import { useRouter } from 'next/navigation'
 import { ActionButton } from './ActionButton'
 import { LogoutButton } from './LogoutButton'
 import { useAuth } from '@/context/AuthContext'
+import { Logo } from '@/components/Logo'
 
 interface NavItem {
 	name: string
@@ -74,16 +74,16 @@ export default function Sidebar() {
 	})
 
 	const secondaryNavItems: NavItem[] = [
-		{
-			name: 'Help & Support',
-			href: '/dashboard/help',
-			icon: <HelpCircle className="h-5 w-5" />,
-		},
-		{
-			name: 'Settings',
-			href: '/dashboard/settings',
-			icon: <Settings className="h-5 w-5" />,
-		},
+		// {
+		// 	name: 'Help & Support',
+		// 	href: '/dashboard/help',
+		// 	icon: <HelpCircle className="h-5 w-5" />,
+		// },
+		// {
+		// 	name: 'Settings',
+		// 	href: '/dashboard/settings',
+		// 	icon: <Settings className="h-5 w-5" />,
+		// },
 		{
 			name: 'Sign out',
 			icon: <LogOut className="h-5 w-5" />,
@@ -111,7 +111,7 @@ export default function Sidebar() {
 			></label>
 			<div className="menu p-4 w-80 h-full bg-base-100 text-base-content">
 				<div className="mb-4 p-4 flex items-center space-x-2">
-					<Shield className="h-6 w-6 text-primary" />
+					<Logo className="h-7 w-7 text-primary" />
 					<Link 
 						href="/dashboard" 
 						className="text-xl font-bold" 
