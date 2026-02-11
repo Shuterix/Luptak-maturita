@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { nanoid } from 'nanoid'
+import { useState, useMemo, useEffect } from 'react'
 import { Button, Input, Alert } from '@/components'
 import { X, Plus, Users } from 'lucide-react'
 import { ParticipantSelectionModal } from './ParticipantSelectionModal'
@@ -25,6 +24,8 @@ interface LessonForm {
 	manualOverride: boolean
 	notes?: string
 	breakType?: 'consecutive' | 'default'
+	status?: string
+	cancellation?: { reason?: string; at?: string }
 }
 
 interface ClubTeacher {
@@ -55,12 +56,12 @@ interface ClubCouple {
 
 type TeacherSource = 'club' | 'external' | 'custom'
 
-type RecurrenceType = 'none' | 'weekly' | 'biweekly'
-
-interface AddStaticLessonModalProps {
+interface EditLessonModalProps {
 	isOpen: boolean
+	lesson: LessonForm | null
 	onClose: () => void
-	onAdd: (lesson: LessonForm) => void
+	onSave: (lesson: LessonForm) => void
+	onDelete: (id: string) => void
 	existingLessons: LessonForm[]
 	slotMinutes: number
 	teachers: ClubTeacher[]
@@ -68,9 +69,6 @@ interface AddStaticLessonModalProps {
 	students: ClubStudent[]
 	couples: ClubCouple[]
 	rooms: string[]
-	/** Timetable date range for limiting recurrence */
-	timetableStartDate?: string
-	timetableEndDate?: string
 }
 
 const lessonTypeOptions: { label: string; value: LessonType }[] = [
@@ -116,20 +114,20 @@ const shareResources = (a: LessonForm, b: LessonForm) => {
 	return false
 }
 
-export function AddStaticLessonModal({
+export function EditLessonModal({
 	isOpen,
+	lesson,
 	onClose,
-	onAdd,
+	onSave,
+	onDelete,
 	existingLessons,
 	slotMinutes,
 	teachers,
 	externalTeachers = [],
-	timetableStartDate,
-	timetableEndDate,
 	students,
 	couples,
 	rooms,
-}: AddStaticLessonModalProps) {
+}: EditLessonModalProps) {
 	const [formData, setFormData] = useState<LessonForm>({
 		id: '',
 		kind: 'lesson',
@@ -158,16 +156,10 @@ export function AddStaticLessonModal({
 	const [customParticipantName, setCustomParticipantName] = useState('')
 	const [showCustomParticipantInput, setShowCustomParticipantInput] = useState(false)
 
-	// In the static lesson modal, "Individual" should behave as
-	// a one-couple lesson (select exactly one couple), not a single student.
-	// We keep the stored lessonType but drive the picker using this mapping.
+	// For editing, keep the same behavior as in AddStaticLessonModal:
+	// "Individual" lessons in this timetable represent one-couple lessons.
 	const effectiveParticipantLessonType: LessonType =
 		formData.lessonType === 'individual' ? 'couple' : (formData.lessonType ?? 'group')
-
-	// Recurrence
-	const [recurrence, setRecurrence] = useState<RecurrenceType>('none')
-	const [recurrenceWeeks, setRecurrenceWeeks] = useState(4)
-	const [recurrenceEndDate, setRecurrenceEndDate] = useState('')
 
 	// Derive unique rooms (filter empty strings)
 	const availableRooms = useMemo(() => {
@@ -185,38 +177,48 @@ export function AddStaticLessonModal({
 		}))
 	}, [couples])
 
-	// Generate all lesson dates based on recurrence settings
-	const generateRecurrenceDates = (startDate: string): string[] => {
-		if (recurrence === 'none') return [startDate]
+	// Populate form when lesson changes
+	useEffect(() => {
+		if (lesson && isOpen) {
+			setFormData({
+				...lesson,
+				studentNames: lesson.studentNames ?? [],
+			})
+			setError(null)
+			setConflicts([])
+			setShowConflictWarning(false)
+			setCustomParticipantName('')
+			setShowCustomParticipantInput(false)
 
-		const dates: string[] = [startDate]
-		const intervalDays = recurrence === 'weekly' ? 7 : 14
-		const start = new Date(startDate)
-		const maxDate = recurrenceEndDate
-			? new Date(recurrenceEndDate)
-			: timetableEndDate
-				? new Date(timetableEndDate)
-				: null
+			// Determine teacher source based on current teacher
+			if (lesson.teacherName) {
+				const isClub = teachers.some(
+					(t) => `${t.firstName} ${t.lastName}` === lesson.teacherName
+				)
+				const isExternal = externalTeachers.some((t) => t.name === lesson.teacherName)
+				if (isClub) {
+					setTeacherSource('club')
+				} else if (isExternal) {
+					setTeacherSource('external')
+				} else {
+					setTeacherSource('custom')
+				}
+			} else {
+				setTeacherSource('club')
+			}
 
-		// Generate dates for recurrenceWeeks or until end date
-		for (let i = 1; i <= (maxDate ? 52 : recurrenceWeeks); i++) {
-			const nextDate = new Date(start)
-			nextDate.setDate(nextDate.getDate() + intervalDays * i)
-			if (maxDate && nextDate > maxDate) break
-			if (!maxDate && i >= recurrenceWeeks) break
-			const dateStr = nextDate.toISOString().split('T')[0]
-			dates.push(dateStr)
+			// Determine room mode
+			if (lesson.roomLabel && availableRooms.includes(lesson.roomLabel)) {
+				setRoomMode('select')
+			} else if (lesson.roomLabel) {
+				setRoomMode('custom')
+			} else {
+				setRoomMode('select')
+			}
 		}
+	}, [lesson, isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
-		return dates
-	}
-
-	const recurrenceDatesPreview = useMemo(() => {
-		if (recurrence === 'none' || !formData.date) return []
-		return generateRecurrenceDates(formData.date)
-	}, [recurrence, formData.date, recurrenceWeeks, recurrenceEndDate, timetableEndDate])
-
-	if (!isOpen) return null
+	if (!isOpen || !lesson) return null
 
 	const handleDateChange = (value: string) => {
 		setFormData((prev) => ({ ...prev, date: value }))
@@ -266,9 +268,10 @@ export function AddStaticLessonModal({
 			return
 		}
 
-		const detectedConflicts = existingLessons.filter((lesson) => {
-			if (!lessonsOverlap(formData, lesson)) return false
-			return shareResources(formData, lesson)
+		const detectedConflicts = existingLessons.filter((existing) => {
+			if (existing.id === formData.id) return false // Don't conflict with self
+			if (!lessonsOverlap(formData, existing)) return false
+			return shareResources(formData, existing)
 		})
 
 		setConflicts(detectedConflicts)
@@ -341,6 +344,15 @@ export function AddStaticLessonModal({
 		checkConflicts()
 	}
 
+	const handleLessonTypeChange = (value: LessonType) => {
+		setFormData((prev) => ({
+			...prev,
+			lessonType: value,
+			studentNames: [],
+			pairLabel: undefined,
+		}))
+	}
+
 	const handleSave = () => {
 		setError(null)
 
@@ -365,26 +377,18 @@ export function AddStaticLessonModal({
 			return
 		}
 
-		// Generate all dates for recurrence
-		const allDates = generateRecurrenceDates(formData.date)
-
-		// Build all lessons
-		const allLessons: LessonForm[] = allDates.map((date) => ({
+		const normalizedLesson: LessonForm = {
 			...formData,
-			date,
 			duration: calculatedDuration,
-			id: `static-${nanoid()}`,
-		}))
-
-		// Check for conflicts across all generated lessons
-		const allConflicts: LessonForm[] = []
-		for (const lesson of allLessons) {
-			const conflicts = existingLessons.filter((existing) => {
-				if (!lessonsOverlap(lesson, existing)) return false
-				return shareResources(lesson, existing)
-			})
-			allConflicts.push(...conflicts)
+			studentNames: formData.studentNames.filter(Boolean),
 		}
+
+		// Check for conflicts (excluding self)
+		const allConflicts = existingLessons.filter((existing) => {
+			if (existing.id === normalizedLesson.id) return false
+			if (!lessonsOverlap(normalizedLesson, existing)) return false
+			return shareResources(normalizedLesson, existing)
+		})
 
 		if (allConflicts.length > 0 && !showConflictWarning) {
 			setConflicts(allConflicts)
@@ -410,7 +414,7 @@ export function AddStaticLessonModal({
 			const extra = allConflicts.length > 5 ? `\n...and ${allConflicts.length - 5} more` : ''
 
 			const confirmed = window.confirm(
-				`This will override ${allConflicts.length} conflicting lesson${allConflicts.length === 1 ? '' : 's'}:\n\n${conflictDetails}${extra}\n\nAre you sure you want to continue?`
+				`This change conflicts with ${allConflicts.length} existing lesson${allConflicts.length === 1 ? '' : 's'}:\n\n${conflictDetails}${extra}\n\nAre you sure you want to continue?`
 			)
 
 			if (!confirmed) {
@@ -418,57 +422,38 @@ export function AddStaticLessonModal({
 			}
 		}
 
-		// Add all lessons
-		for (const lesson of allLessons) {
-			onAdd(lesson)
-		}
+		onSave(normalizedLesson)
 		handleClose()
 	}
 
 	const handleClose = () => {
-		setFormData({
-			id: '',
-			kind: 'lesson',
-			lessonType: 'group',
-			date: '',
-			startTime: '',
-			endTime: '',
-			duration: 45,
-			teacherName: '',
-			roomLabel: '',
-			studentNames: [],
-			locked: false,
-			manualOverride: true,
-			notes: '',
-		})
 		setError(null)
 		setConflicts([])
 		setShowConflictWarning(false)
-		setTeacherSource('club')
-		setRoomMode('select')
 		setIsParticipantModalOpen(false)
 		setCustomParticipantName('')
 		setShowCustomParticipantInput(false)
-		setRecurrence('none')
-		setRecurrenceWeeks(4)
-		setRecurrenceEndDate('')
 		onClose()
 	}
 
-	const handleLessonTypeChange = (value: LessonType) => {
-		setFormData((prev) => ({
-			...prev,
-			lessonType: value,
-			studentNames: [],
-			pairLabel: undefined,
-		}))
+	const handleDelete = () => {
+		const confirmed = window.confirm('Are you sure you want to delete this lesson? This action cannot be undone.')
+		if (confirmed) {
+			onDelete(formData.id)
+			handleClose()
+		}
 	}
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-base-content/60 backdrop-blur-sm p-4">
 			<div className="w-full max-w-2xl rounded-2xl bg-base-200 shadow-2xl border border-base-300 max-h-[90vh] overflow-y-auto">
 				<div className="flex items-center justify-between border-b border-base-300 px-6 py-4 sticky top-0 bg-base-200 z-10">
-					<h2 className="text-xl font-semibold text-base-content">Add Static Lesson</h2>
+					<div>
+						<h2 className="text-xl font-semibold text-base-content">
+							{formData.kind === 'lesson' ? 'Edit Lesson' : 'Edit Time Slot'}
+						</h2>
+						<p className="text-xs text-base-content/60">{formData.date}</p>
+					</div>
 					<button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={handleClose}>
 						✕
 					</button>
@@ -498,7 +483,7 @@ export function AddStaticLessonModal({
 										</li>
 									))}
 								</ul>
-								<p className="text-sm mt-2">Clicking &quot;Add Lesson&quot; will override these conflicts.</p>
+								<p className="text-sm mt-2">Clicking &quot;Save Changes&quot; will override these conflicts.</p>
 							</div>
 						</Alert>
 					)}
@@ -664,7 +649,7 @@ export function AddStaticLessonModal({
 										</>
 									)}
 
-									{/* Custom freeform input (temporary teacher for this timetable) */}
+									{/* Custom freeform input */}
 									{teacherSource === 'custom' && (
 										<Input
 											value={formData.teacherName ?? ''}
@@ -838,102 +823,6 @@ export function AddStaticLessonModal({
 						</>
 					)}
 
-					{/* Recurrence */}
-					<div className="form-control">
-						<span className="label-text mb-1">Recurrence</span>
-						<div className="flex rounded-lg border border-base-300 overflow-hidden">
-							<button
-								type="button"
-								className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-									recurrence === 'none'
-										? 'bg-primary text-primary-content'
-										: 'bg-base-100 hover:bg-base-200'
-								}`}
-								onClick={() => setRecurrence('none')}
-							>
-								One-time
-							</button>
-							<button
-								type="button"
-								className={`flex-1 px-3 py-2 text-xs font-medium transition-colors border-l border-base-300 ${
-									recurrence === 'weekly'
-										? 'bg-primary text-primary-content'
-										: 'bg-base-100 hover:bg-base-200'
-								}`}
-								onClick={() => setRecurrence('weekly')}
-							>
-								Weekly
-							</button>
-							<button
-								type="button"
-								className={`flex-1 px-3 py-2 text-xs font-medium transition-colors border-l border-base-300 ${
-									recurrence === 'biweekly'
-										? 'bg-primary text-primary-content'
-										: 'bg-base-100 hover:bg-base-200'
-								}`}
-								onClick={() => setRecurrence('biweekly')}
-							>
-								Biweekly
-							</button>
-						</div>
-
-						{recurrence !== 'none' && (
-							<div className="mt-3 space-y-3">
-								<div className="grid gap-3 sm:grid-cols-2">
-									<label className="form-control">
-										<span className="label-text text-xs">Number of weeks</span>
-										<Input
-											type="number"
-											min={1}
-											max={52}
-											value={recurrenceWeeks}
-											onChange={(e) => {
-												setRecurrenceWeeks(Number(e.target.value))
-												setRecurrenceEndDate('') // Clear end date when weeks change
-											}}
-											disabled={!!recurrenceEndDate}
-										/>
-									</label>
-									<label className="form-control">
-										<span className="label-text text-xs">Or until date</span>
-										<Input
-											type="date"
-											value={recurrenceEndDate}
-											onChange={(e) => setRecurrenceEndDate(e.target.value)}
-											min={formData.date || undefined}
-											max={timetableEndDate || undefined}
-										/>
-									</label>
-								</div>
-
-								{recurrenceDatesPreview.length > 0 && formData.date && (
-									<div className="bg-base-100 rounded-lg p-3 border border-base-300">
-										<p className="text-xs font-medium text-base-content/60 mb-1.5">
-											{recurrenceDatesPreview.length} lesson{recurrenceDatesPreview.length !== 1 ? 's' : ''} will be created:
-										</p>
-										<div className="flex flex-wrap gap-1.5">
-											{recurrenceDatesPreview.slice(0, 8).map((date) => {
-												const d = new Date(date)
-												const dayName = d.toLocaleDateString('en', { weekday: 'short' })
-												const display = d.toLocaleDateString('en', { month: 'short', day: 'numeric' })
-												return (
-													<span key={date} className="badge badge-sm badge-outline">
-														{dayName} {display}
-													</span>
-												)
-											})}
-											{recurrenceDatesPreview.length > 8 && (
-												<span className="badge badge-sm badge-ghost">
-													+{recurrenceDatesPreview.length - 8} more
-												</span>
-											)}
-										</div>
-									</div>
-								)}
-							</div>
-						)}
-					</div>
-
 					{/* Notes */}
 					<label className="form-control">
 						<span className="label-text">Notes</span>
@@ -972,16 +861,20 @@ export function AddStaticLessonModal({
 				</div>
 
 				<div className="flex items-center justify-between gap-3 border-t border-base-300 px-6 py-4">
-					<Button className="btn-ghost" onClick={handleClose}>
-						Cancel
+					<Button className="btn-error" onClick={handleDelete}>
+						Delete
 					</Button>
-					<Button className="btn-primary" onClick={handleSave}>
-						{recurrence !== 'none' && recurrenceDatesPreview.length > 1
-							? `Add ${recurrenceDatesPreview.length} Lessons`
-							: 'Add Lesson'}
-					</Button>
+					<div className="flex items-center gap-2">
+						<Button className="btn-ghost" onClick={handleClose}>
+							Cancel
+						</Button>
+						<Button className="btn-primary" onClick={handleSave}>
+							Save Changes
+						</Button>
+					</div>
 				</div>
 			</div>
 		</div>
 	)
 }
+

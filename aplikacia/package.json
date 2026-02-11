@@ -23,7 +23,8 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.56.4",
     "sass": "^1.89.0",
-    "sonner": "^2.0.3"
+    "sonner": "^2.0.3",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -33,6 +34,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "daisyui": "^5.0.37",
     "eslint": "^9",
     "eslint-config-next": "15.3.2",

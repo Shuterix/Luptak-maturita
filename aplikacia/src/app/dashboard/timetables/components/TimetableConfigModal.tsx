@@ -91,6 +91,58 @@ export function TimetableConfigModal({ isOpen, onClose, form, onSave }: Timetabl
 						</Alert>
 					)}
 
+					{/* Timetable Name */}
+					<div className="space-y-4">
+						<div className="space-y-1">
+							<h3 className="text-lg font-semibold text-base-content">Timetable Info</h3>
+							<p className="text-sm text-base-content/60">Change the timetable name, type, and date range.</p>
+						</div>
+						<label className="form-control">
+							<span className="label-text">Timetable Name</span>
+							<Input
+								value={localForm.name}
+								onChange={(e) => setLocalForm({ ...localForm, name: e.target.value })}
+								placeholder="e.g. Spring Season 2026"
+							/>
+						</label>
+						<label className="form-control">
+							<span className="label-text">Type</span>
+							<select
+								className="select select-bordered"
+								value={localForm.type}
+								onChange={(e) => setLocalForm({ ...localForm, type: e.target.value as TimetableType })}
+							>
+								{timetableTypes.map((t) => (
+									<option key={t.value} value={t.value}>
+										{t.label}
+									</option>
+								))}
+							</select>
+						</label>
+						<div className="grid grid-cols-2 gap-4">
+							<label className="form-control">
+								<span className="label-text">Start Date</span>
+								<Input
+									type="date"
+									value={localForm.startDate}
+									onChange={(e) => setLocalForm({ ...localForm, startDate: e.target.value })}
+								/>
+							</label>
+							<label className="form-control">
+								<span className="label-text">End Date</span>
+								<Input
+									type="date"
+									value={localForm.endDate}
+									onChange={(e) => setLocalForm({ ...localForm, endDate: e.target.value })}
+									min={localForm.startDate || undefined}
+								/>
+							</label>
+						</div>
+						{localForm.type === 'weekly' && !localForm.startDate && !localForm.endDate && (
+							<p className="text-xs text-base-content/50">Dates are optional for weekly universal templates. Leave empty for a reusable template.</p>
+						)}
+					</div>
+
 					<div className="space-y-4">
 						<div className="space-y-1">
 							<h3 className="text-lg font-semibold text-base-content">Schedule Settings</h3>

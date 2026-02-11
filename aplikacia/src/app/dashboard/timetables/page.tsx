@@ -21,6 +21,7 @@ import { TimetableConfigModal } from './components/TimetableConfigModal'
 import { SchedulerConfigModal } from './components/SchedulerConfigModal'
 import { CreateTimetableModal } from './components/CreateTimetableModal'
 import { AddStaticLessonModal } from './components/AddStaticLessonModal'
+import { EditLessonModal } from './components/EditLessonModal'
 import MobileDaySelector from './components/MobileDaySelector'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 
@@ -376,7 +377,9 @@ const convertFromApiLesson = (lesson: any): LessonForm => {
 		studentNames: lesson.studentNames ?? [],
 		pairLabel: lesson.pairLabel ?? undefined, // Include pairLabel for couple lessons
 		locked: Boolean(lesson.locked),
-		manualOverride: lesson.manualOverride ?? true,
+		// Treat explicit manualOverride=true as a static/manual lesson.
+		// If the field is missing, default to false (algorithm-generated or legacy).
+		manualOverride: lesson.manualOverride ?? false,
 		notes: lesson.notes ?? '',
 		breakType: lesson.breakType,
 		status: lesson.status ?? 'scheduled',
@@ -442,7 +445,11 @@ const convertFromTimetableLesson = (lesson: TimetableLesson): LessonForm => {
 		pairLabel: pairLabel, // Add pairLabel for couple lessons
 		locked: false,
 		manualOverride: false,
-		notes: lesson.groupName ? `Group: ${lesson.groupName}` : '', // Add group name as note for group lessons
+		notes: lesson.groupName
+			? lesson.lessonName
+				? `Group: ${lesson.groupName}\nLesson: ${lesson.lessonName}`
+				: `Group: ${lesson.groupName}`
+			: '', // Add group name as note for group lessons
 		breakType: (lesson as any).breakType,
 	}
 }
@@ -479,6 +486,10 @@ const [groupLessons, setGroupLessons] = useState<GroupLesson[]>([])
 	const [loadingCouples, setLoadingCouples] = useState(false)
 	const [dbTeachers, setDbTeachers] = useState<any[]>([])
 	const [loadingTeachers, setLoadingTeachers] = useState(false)
+	const [dbStudents, setDbStudents] = useState<any[]>([])
+	const [loadingStudents, setLoadingStudents] = useState(false)
+	const [dbExternalTeachers, setDbExternalTeachers] = useState<{ _id: string; name: string; code: string }[]>([])
+	const [dbGroups, setDbGroups] = useState<{ _id: string; name: string }[]>([])
 const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 	const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
 	const [isSchedulerModalOpen, setIsSchedulerModalOpen] = useState(false)
@@ -666,6 +677,9 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 			fetchTimetables(user.clubId)
 			fetchDbCouples()
 			fetchDbTeachers()
+			fetchDbStudents()
+			fetchExternalTeachers()
+			fetchGroups()
 		}
 	}, [user?.clubId, viewingTimetableId, isLoggingOut])
 
@@ -703,6 +717,46 @@ const [isEditorModalOpen, setIsEditorModalOpen] = useState(false)
 			console.error('Error fetching teachers:', err)
 		} finally {
 			setLoadingTeachers(false)
+		}
+	}
+
+	const fetchExternalTeachers = async () => {
+		try {
+			const res = await fetch('/api/external-teachers', { cache: 'no-store' })
+			if (res.ok) {
+				const data = await res.json()
+				setDbExternalTeachers(data.teachers || [])
+			}
+		} catch (err) {
+			console.error('Error fetching external teachers:', err)
+		}
+	}
+
+	const fetchGroups = async () => {
+		try {
+			const res = await fetch('/api/groups', { cache: 'no-store' })
+			if (res.ok) {
+				const data = await res.json()
+				setDbGroups((data.groups || []).map((g: any) => ({ _id: String(g._id), name: g.name })))
+			}
+		} catch (err) {
+			console.error('Error fetching groups:', err)
+		}
+	}
+
+	const fetchDbStudents = async () => {
+		if (!user?.clubId) return
+		setLoadingStudents(true)
+		try {
+			const res = await fetch(`/api/users?clubId=${user.clubId}&role=student`, { cache: 'no-store' })
+			if (res.ok) {
+				const data = await res.json()
+				setDbStudents(data.users || [])
+			}
+		} catch (err) {
+			console.error('Error fetching students:', err)
+		} finally {
+			setLoadingStudents(false)
 		}
 	}
 
@@ -841,6 +895,11 @@ const handleUpdateAutoCouple = <K extends keyof CoupleForm>(id: string, key: K, 
 
 const handleGenerateAutomaticSchedule = () => {
 	setAutoError(null)
+
+	// Preserve existing static/manual lessons across generations.
+	// Static lessons are those explicitly marked as manualOverride by the user
+	// (e.g., created via "Add Static Lesson" or edited and checked as Manual Override).
+	const existingStaticLessons = lessons.filter((l) => l.manualOverride)
 
 	// Use ref to get the latest group lessons (state might be stale due to async updates)
 	const currentGroupLessons = groupLessonsRef.current.length > 0 ? groupLessonsRef.current : groupLessons
@@ -1388,6 +1447,16 @@ const handleGenerateAutomaticSchedule = () => {
 			return
 		}
 
+		// Remove any generated lessons that conflict with existing static/manual lessons.
+		// Static lessons always win; generated lessons are treated as suggestions.
+		const nonConflictingGenerated = generatedLessons.filter((gen) => {
+			return !existingStaticLessons.some((staticLesson) => {
+				if (!gen.date || !staticLesson.date || gen.date !== staticLesson.date) return false
+				if (!lessonsOverlap(gen, staticLesson)) return false
+				return shareResources(gen, staticLesson)
+			})
+		})
+
 		// Single comprehensive log with all input and output
 		console.log(JSON.stringify({
 			input: {
@@ -1491,11 +1560,11 @@ const handleGenerateAutomaticSchedule = () => {
 			},
 			output: {
 				summary: {
-					totalLessons: generatedLessons.length,
+					totalLessons: nonConflictingGenerated.length,
 					studentsUnmet: result.summary.studentsUnmet || [],
 					studentsUnmetCount: result.summary.studentsUnmet?.length || 0,
 				},
-				lessons: generatedLessons.map(l => ({
+				lessons: nonConflictingGenerated.map(l => ({
 					id: l.id,
 					date: l.date,
 					startTime: l.startTime,
@@ -1511,16 +1580,18 @@ const handleGenerateAutomaticSchedule = () => {
 					manualOverride: l.manualOverride,
 				})),
 				lessonsByType: {
-					group: generatedLessons.filter(l => l.lessonType === 'group').length,
-					couple: generatedLessons.filter(l => l.lessonType === 'couple').length,
-					individual: generatedLessons.filter(l => l.lessonType === 'individual').length,
-					break: generatedLessons.filter(l => l.kind === 'break').length,
+					group: nonConflictingGenerated.filter(l => l.lessonType === 'group').length,
+					couple: nonConflictingGenerated.filter(l => l.lessonType === 'couple').length,
+					individual: nonConflictingGenerated.filter(l => l.lessonType === 'individual').length,
+					break: nonConflictingGenerated.filter(l => l.kind === 'break').length,
 				},
+				staticLessonsPreserved: existingStaticLessons.length,
 			},
 		}, null, 2))
 
-		setLessons(generatedLessons)
-		setInfo(`Generated ${generatedLessons.length} lessons automatically.`)
+		// Merge: keep all static/manual lessons and fill remaining space with generated ones.
+		setLessons([...existingStaticLessons, ...nonConflictingGenerated])
+		setInfo(`Generated ${nonConflictingGenerated.length} lessons automatically and kept ${existingStaticLessons.length} static lesson${existingStaticLessons.length === 1 ? '' : 's'}.`)
 		// Only show unmet students as a warning, not an error, since some lessons were generated
 		if (result.summary.studentsUnmet && result.summary.studentsUnmet.length > 0) {
 			setInfo(`Generated ${generatedLessons.length} lessons. Note: ${result.summary.studentsUnmet.length} couple(s) could not be fully satisfied: ${result.summary.studentsUnmet.join(', ')}`)
@@ -1776,68 +1847,46 @@ const handleGenerateAutomaticSchedule = () => {
 			})
 	}, [dbCouples])
 
-	const updateLessonModal = (updates: Partial<LessonForm>) => {
-		setLessonModalForm((prev) => (prev ? { ...prev, ...updates } : prev))
-	}
-
-	const handleLessonModalStudentsChange = (value: string) => {
-		updateLessonModal({
-			studentNames: value.split(',').map((entry) => entry.trim()).filter(Boolean),
-		})
-	}
-
-	const handleLessonModalStartTimeChange = (value: string) => {
-		setLessonModalForm((prev) => {
-			if (!prev) return prev
-			if (prev.kind === 'lesson') {
-				const duration = Math.max(1, prev.duration || 0)
-				return {
-					...prev,
-					startTime: value,
-					endTime: addDuration(value, duration),
-				}
-			}
-			return { ...prev, startTime: value }
-		})
-	}
-
-	const handleLessonModalDurationChange = (minutesValue: number) => {
-		setLessonModalForm((prev) => {
-			if (!prev) return prev
-			const parsed = Number(minutesValue)
-			const safeDuration = Number.isFinite(parsed) && parsed > 0 ? parsed : 1
-			return {
-				...prev,
-				duration: safeDuration,
-				endTime: addDuration(prev.startTime, safeDuration),
-			}
-		})
-	}
-
-	const handleLessonModalEndTimeChange = (value: string) => {
-		setLessonModalForm((prev) => {
-			if (!prev) return prev
-			const targetMinutes = toMinutes(value)
-			if (Number.isNaN(targetMinutes)) {
-				return prev
-			}
-			const computedDuration = Math.max(1, targetMinutes - toMinutes(prev.startTime))
-			return {
-				...prev,
-				endTime: value,
-				duration: computedDuration,
-			}
-		})
-	}
-
-	const handleLessonModalDelete = (id: string) => {
-		const confirmed = window.confirm('Are you sure you want to delete this lesson? This action cannot be undone.')
-		if (confirmed) {
-			handleDeleteLesson(id)
-			showAlertToast('Lesson deleted', { variant: 'warning', title: 'Timetable' })
-			setLessonModalForm(null)
+	// Build a mapping from group ID to group name
+	const groupNameMap = useMemo(() => {
+		const map = new Map<string, string>()
+		for (const g of dbGroups) {
+			map.set(g._id, g.name)
 		}
-	}
+		return map
+	}, [dbGroups])
+
+	// Data for AddStaticLessonModal - couples in simplified format
+	const staticModalCouples = useMemo(() => {
+		return dbCouples
+			.filter((pair: any) => pair.studentAId && pair.studentBId)
+			.map((pair: any) => {
+				const studentA = pair.studentAId
+				const studentB = pair.studentBId
+				const groupIds = pair.baseGroups || (pair.baseGroup ? [pair.baseGroup] : [])
+				// Resolve group IDs to group names
+				const resolvedGroups = (groupIds as string[])
+					.map((id: string) => groupNameMap.get(id) || id)
+				return {
+					pairId: pair._id,
+					label: `${studentA.firstName} ${studentA.lastName} & ${studentB.firstName} ${studentB.lastName}`,
+					studentA: `${studentA.firstName} ${studentA.lastName}`,
+					studentB: `${studentB.firstName} ${studentB.lastName}`,
+					baseGroups: resolvedGroups,
+				}
+			})
+	}, [dbCouples, groupNameMap])
+
+	// Derive unique room names from teacher configs
+	const availableRooms = useMemo(() => {
+		const rooms: string[] = []
+		editorTeachers.forEach((t) => {
+			if (t.room && !rooms.includes(t.room)) {
+				rooms.push(t.room)
+			}
+		})
+		return rooms
+	}, [editorTeachers])
 
 	const handleDeleteLessonFromCard = (e: React.MouseEvent, lessonId: string) => {
 		e.stopPropagation() // Prevent triggering the card click
@@ -1846,53 +1895,6 @@ const handleGenerateAutomaticSchedule = () => {
 			handleDeleteLesson(lessonId)
 			showAlertToast('Lesson deleted', { variant: 'warning', title: 'Timetable' })
 		}
-	}
-
-	const handleLessonModalSave = () => {
-		if (!lessonModalForm) return
-
-		const cleanedStudentNames = lessonModalForm.studentNames?.filter(Boolean) ?? []
-		const calculatedDuration = Math.max(1, toMinutes(lessonModalForm.endTime) - toMinutes(lessonModalForm.startTime))
-
-		if (calculatedDuration <= 0) {
-			showAlertToast('End time must be after start time', { variant: 'error', title: 'Invalid time' })
-			return
-		}
-
-		const normalizedLesson: LessonForm = {
-			...lessonModalForm,
-			duration: calculatedDuration,
-			studentNames: cleanedStudentNames,
-		}
-
-		const conflicts = lessons.filter(
-			(lesson) => lesson.id !== normalizedLesson.id && lessonsOverlap(normalizedLesson, lesson),
-		)
-
-		if (conflicts.length > 0) {
-			const confirmation = window.confirm(
-				`This change overlaps with ${conflicts.length} other lesson${conflicts.length === 1 ? '' : 's'}. Overwrite them?`,
-			)
-			if (!confirmation) {
-				return
-			}
-			const conflictIds = new Set(conflicts.map((lesson) => lesson.id))
-			setLessons((prev) => {
-				const withoutConflicts = prev.filter(
-					(lesson) => lesson.id === normalizedLesson.id || !conflictIds.has(lesson.id),
-				)
-				const withoutOriginal = withoutConflicts.filter((lesson) => lesson.id !== normalizedLesson.id)
-				return [...withoutOriginal, normalizedLesson]
-			})
-			showAlertToast('Conflicting lessons overwritten', { variant: 'warning', title: 'Timetable' })
-		} else {
-			setLessons((prev) =>
-				prev.map((lesson) => (lesson.id === normalizedLesson.id ? normalizedLesson : lesson)),
-			)
-			showAlertToast('Lesson updated', { variant: 'success', title: 'Timetable' })
-		}
-
-		setLessonModalForm(null)
 	}
 
 	const handleSaveTimetable = async () => {
@@ -2639,15 +2641,24 @@ return (
 																const isCancelled = lesson.status === 'cancelled'
 																const badgeLabel = isLesson ? (lesson.lessonType ?? 'lesson') : lesson.kind
 																
-																// Extract group name from notes if it's a group lesson
-																const groupName = isLesson && lesson.lessonType === 'group' && lesson.notes
-																	? lesson.notes.replace(/^Group:\s*/i, '').trim()
-																	: null
+																// Extract group name and lesson name from notes if it's a group lesson
+																let groupName: string | null = null
+																let lessonDisplayName: string | null = null
+																if (isLesson && lesson.lessonType === 'group' && lesson.notes) {
+																	const groupMatch = lesson.notes.match(/^Group:\s*(.+?)(?:\n|$)/i)
+																	if (groupMatch) groupName = groupMatch[1].trim()
+																	const lessonMatch = lesson.notes.match(/\nLesson:\s*(.+?)$/im)
+																	if (lessonMatch) lessonDisplayName = lessonMatch[1].trim()
+																}
 																
-																// For individual lessons, show participant name; for group lessons, show group name
+																// For group lessons show lesson name (if set) + group name; for individual show couple
 																const displayName = isLesson
-																	? lesson.lessonType === 'group' && groupName
-																		? groupName
+																	? lesson.lessonType === 'group'
+																		? lessonDisplayName
+																			? lessonDisplayName
+																			: groupName
+																				? groupName
+																				: lesson.teacherName || 'Unassigned teacher'
 																		: lesson.lessonType === 'individual' && lesson.studentNames.length > 0
 																			? lesson.studentNames[0]
 																			: lesson.teacherName || 'Unassigned teacher'
@@ -2659,7 +2670,9 @@ return (
 																		: 'No participants'
 																	: ''
 																const detailsLine = isLesson
-																	? `${lesson.roomLabel || 'No room'} · ${participantLabel}`
+																	? lesson.lessonType === 'group' && lessonDisplayName && groupName
+																		? `${groupName} · ${lesson.roomLabel || 'No room'} · ${participantLabel}`
+																		: `${lesson.roomLabel || 'No room'} · ${participantLabel}`
 																	: lesson.notes || lesson.roomLabel || 'Break period'
 																	// Different colors for different lesson types
 																	let backgroundClass = 'bg-neutral/20 border-neutral/40 text-base-content'
@@ -2807,15 +2820,24 @@ return (
 																	const isCancelled = lesson.status === 'cancelled'
 																	const badgeLabel = isLesson ? (lesson.lessonType ?? 'lesson') : lesson.kind
 																	
-																	// Extract group name from notes if it's a group lesson
-																	const groupName = isLesson && lesson.lessonType === 'group' && lesson.notes
-																		? lesson.notes.replace(/^Group:\s*/i, '').trim()
-																		: null
+																	// Extract group name and lesson name from notes if it's a group lesson
+																	let groupName: string | null = null
+																	let lessonDisplayName: string | null = null
+																	if (isLesson && lesson.lessonType === 'group' && lesson.notes) {
+																		const groupMatch = lesson.notes.match(/^Group:\s*(.+?)(?:\n|$)/i)
+																		if (groupMatch) groupName = groupMatch[1].trim()
+																		const lessonMatch = lesson.notes.match(/\nLesson:\s*(.+?)$/im)
+																		if (lessonMatch) lessonDisplayName = lessonMatch[1].trim()
+																	}
 																	
-																	// For individual lessons, show participant name; for group lessons, show group name
+																	// For group lessons show lesson name (if set) + group name
 																	const displayName = isLesson
-																		? lesson.lessonType === 'group' && groupName
-																			? groupName
+																		? lesson.lessonType === 'group'
+																			? lessonDisplayName
+																				? lessonDisplayName
+																				: groupName
+																					? groupName
+																					: lesson.teacherName || 'Unassigned teacher'
 																			: lesson.lessonType === 'individual' && lesson.studentNames.length > 0
 																				? lesson.studentNames[0]
 																				: lesson.teacherName || 'Unassigned teacher'
@@ -2827,7 +2849,9 @@ return (
 																			: 'No participants'
 																		: ''
 																	const detailsLine = isLesson
-																		? `${lesson.roomLabel || 'No room'} · ${participantLabel}`
+																		? lesson.lessonType === 'group' && lessonDisplayName && groupName
+																			? `${groupName} · ${lesson.roomLabel || 'No room'} · ${participantLabel}`
+																			: `${lesson.roomLabel || 'No room'} · ${participantLabel}`
 																		: lesson.notes || lesson.roomLabel || 'Break period'
 																	// Different colors for different lesson types
 																	let backgroundClass = 'bg-neutral/20 border-neutral/40 text-base-content'
@@ -2936,169 +2960,45 @@ return (
 			</div>
 		</section>
 
-		{lessonModalForm && (
-			<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-				<div className="w-full max-w-lg rounded-2xl bg-base-100 shadow-2xl">
-					<div className="flex items-center justify-between border-b border-base-200 px-4 py-3">
-						<div>
-							<h3 className="text-lg font-semibold text-base-content">
-								{lessonModalForm.kind === 'lesson' ? 'Edit lesson' : 'Edit time slot'}
-							</h3>
-							<p className="text-xs text-base-content/60">{lessonModalForm.date}</p>
-						</div>
-						<button type="button" className="btn btn-ghost btn-sm" onClick={closeLessonModal}>
-							✕
-						</button>
-					</div>
-
-					<div className="space-y-4 px-4 py-5">
-							<label className="form-control">
-								<span className="label-text">Date</span>
-								<Input
-									type="date"
-								value={lessonModalForm.date}
-								onChange={(event) => updateLessonModal({ date: event.target.value })}
-								/>
-							</label>
-
-						<div className="grid gap-4 sm:grid-cols-2">
-							<label className="form-control">
-								<span className="label-text">Start time</span>
-								<Input
-									type="time"
-									value={lessonModalForm.startTime}
-									onChange={(event) => handleLessonModalStartTimeChange(event.target.value)}
-								/>
-							</label>
-							{lessonModalForm.kind === 'lesson' ? (
-								<label className="form-control">
-									<span className="label-text">Duration (minutes)</span>
-									<Input
-										type="number"
-										min={form.slotMinutes}
-										step={form.slotMinutes}
-										value={lessonModalForm.duration}
-										onChange={(event) => handleLessonModalDurationChange(Number(event.target.value))}
-								/>
-								</label>
-							) : (
-								<label className="form-control">
-									<span className="label-text">End time</span>
-									<Input
-										type="time"
-										value={lessonModalForm.endTime}
-										onChange={(event) => handleLessonModalEndTimeChange(event.target.value)}
-									/>
-								</label>
-							)}
-						</div>
-
-						{lessonModalForm.kind === 'lesson' && (
-							<>
-								<p className="text-xs text-base-content/50">
-									Ends at <span className="font-mono">{lessonModalForm.endTime}</span>
-								</p>
-								<label className="form-control">
-									<span className="label-text">Lesson type</span>
-									<select
-										className="select select-bordered"
-										value={lessonModalForm.lessonType ?? 'group'}
-										onChange={(event) =>
-											updateLessonModal({ lessonType: event.target.value as LessonType })
-										}
-									>
-										{lessonTypeOptions.map((option) => (
-											<option key={option.value} value={option.value}>
-												{option.label}
-											</option>
-										))}
-									</select>
-								</label>
-								<div className="grid gap-4 sm:grid-cols-2">
-									<label className="form-control">
-										<span className="label-text">Teacher</span>
-										<Input
-											value={lessonModalForm.teacherName ?? ''}
-											onChange={(event) => updateLessonModal({ teacherName: event.target.value })}
-											placeholder="Teacher"
-										/>
-									</label>
-									<label className="form-control">
-										<span className="label-text">Room</span>
-										<Input
-											value={lessonModalForm.roomLabel ?? ''}
-											onChange={(event) => updateLessonModal({ roomLabel: event.target.value })}
-											placeholder="Room"
-										/>
-									</label>
-									<label className="form-control sm:col-span-2">
-										<span className="label-text">Participants (comma separated)</span>
-										<textarea
-											className="textarea textarea-bordered"
-											rows={2}
-											value={lessonModalForm.studentNames.join(', ')}
-											onChange={(event) => handleLessonModalStudentsChange(event.target.value)}
-										></textarea>
-									</label>
-								</div>
-								</>
-							)}
-
-						<div className="flex flex-col gap-4">
-							<label className="form-control">
-								<span className="label-text">Notes</span>
-								<textarea
-									className="textarea textarea-bordered"
-									rows={3}
-									value={lessonModalForm.notes ?? ''}
-									onChange={(event) => updateLessonModal({ notes: event.target.value })}
-								></textarea>
-							</label>
-							<div className="flex flex-wrap items-center gap-4">
-								<label className="label cursor-pointer gap-2">
-									<span className="label-text">Locked</span>
-									<input
-										type="checkbox"
-										className="toggle"
-										checked={lessonModalForm.locked}
-										onChange={(event) => updateLessonModal({ locked: event.target.checked })}
-									/>
-								</label>
-								{lessonModalForm.kind === 'lesson' && (
-									<label className="label cursor-pointer gap-2">
-										<span className="label-text">Manual override</span>
-										<input
-											type="checkbox"
-											className="toggle"
-											checked={lessonModalForm.manualOverride}
-											onChange={(event) => updateLessonModal({ manualOverride: event.target.checked })}
-										/>
-									</label>
-								)}
-							</div>
-						</div>
-						</div>
-
-					<div className="flex items-center justify-between gap-3 border-t border-base-200 px-4 py-3">
-						<button
-							type="button"
-							className="btn btn-error btn-sm"
-							onClick={() => handleLessonModalDelete(lessonModalForm.id)}
-						>
-														Delete
-						</button>
-						<div className="flex items-center gap-2">
-							<button type="button" className="btn btn-ghost btn-sm" onClick={closeLessonModal}>
-								Cancel
-							</button>
-							<button type="button" className="btn btn-primary btn-sm" onClick={handleLessonModalSave}>
-								Save changes
-							</button>
-						</div>
-					</div>
-				</div>
-					</div>
-		)}
+		{/* Edit Lesson Modal */}
+		<EditLessonModal
+			isOpen={!!lessonModalForm}
+			lesson={lessonModalForm}
+			onClose={closeLessonModal}
+			onSave={(updatedLesson) => {
+				const conflicts = lessons.filter(
+					(lesson) => lesson.id !== updatedLesson.id && lessonsOverlap(updatedLesson, lesson),
+				)
+				if (conflicts.length > 0) {
+					const conflictIds = new Set(conflicts.map((lesson) => lesson.id))
+					setLessons((prev) => {
+						const withoutConflicts = prev.filter(
+							(lesson) => lesson.id === updatedLesson.id || !conflictIds.has(lesson.id),
+						)
+						const withoutOriginal = withoutConflicts.filter((lesson) => lesson.id !== updatedLesson.id)
+						return [...withoutOriginal, updatedLesson]
+					})
+					showAlertToast('Lesson updated (conflicting lessons overwritten)', { variant: 'warning', title: 'Timetable' })
+				} else {
+					setLessons((prev) =>
+						prev.map((lesson) => (lesson.id === updatedLesson.id ? updatedLesson : lesson)),
+					)
+					showAlertToast('Lesson updated', { variant: 'success', title: 'Timetable' })
+				}
+				setLessonModalForm(null)
+			}}
+			onDelete={(id) => {
+				handleDeleteLesson(id)
+				setLessonModalForm(null)
+			}}
+			existingLessons={lessons}
+			slotMinutes={form.slotMinutes}
+			teachers={dbTeachers}
+			externalTeachers={dbExternalTeachers}
+			students={dbStudents}
+			couples={staticModalCouples}
+			rooms={availableRooms}
+		/>
 
 		{/* Timetable Configuration Modal */}
 		<TimetableConfigModal
@@ -3211,6 +3111,13 @@ return (
 			onAdd={handleAddStaticLesson}
 			existingLessons={lessons}
 			slotMinutes={form.slotMinutes}
+			teachers={dbTeachers}
+			externalTeachers={dbExternalTeachers}
+			students={dbStudents}
+			couples={staticModalCouples}
+			rooms={availableRooms}
+			timetableStartDate={form.startDate}
+			timetableEndDate={form.endDate}
 		/>
 
 		{/* Overwrite Confirmation Modal */}

@@ -10,7 +10,7 @@ interface User {
 	firstName?: string
 	lastName?: string
 	email?: string
-	role?: 'student' | 'trainer' | 'admin'
+	role?: 'student' | 'trainer' | 'admin' | 'external_teacher'
 	clubId?: string
 	onboardingStep?: number
 }

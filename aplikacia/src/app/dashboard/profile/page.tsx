@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext'
 import { Button, Input, Alert } from '@/components'
 import { showAlertToast } from '@/components/toast/Toast'
 import ResponsiveModal from '@/components/ResponsiveModal'
+import NotificationSettings from '@/components/NotificationSettings'
 import { Clock, User, Save, ChevronDown, ChevronUp, Edit2, Calendar } from 'lucide-react'
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
@@ -539,6 +540,9 @@ export default function TrainerProfilePage() {
 					</div>
 				</div>
 			</div>
+
+			{/* Notification Settings */}
+			<NotificationSettings />
 		</div>
 	)
 }

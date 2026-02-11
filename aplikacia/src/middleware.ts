@@ -17,6 +17,9 @@ export function middleware(request: NextRequest) {
 	if (pathname === '/') {
 		if (!token)
 			return NextResponse.redirect(new URL('/auth/login', request.url))
+		const role = request.cookies.get('role')?.value
+		if (role === 'external_teacher')
+			return NextResponse.redirect(new URL('/dashboard/my-lessons', request.url))
 		if (onboardingStep < 2)
 			return NextResponse.redirect(new URL('/onboarding', request.url))
 		return NextResponse.redirect(new URL('/dashboard', request.url))
@@ -28,6 +31,21 @@ export function middleware(request: NextRequest) {
 
 	if (token) {
 		const role = request.cookies.get('role')?.value || 'user'
+
+		// External teachers can only access /dashboard/my-lessons
+		if (role === 'external_teacher') {
+			if (pathname.startsWith('/auth')) {
+				return NextResponse.redirect(new URL('/dashboard/my-lessons', request.url))
+			}
+			if (pathname.startsWith('/onboarding')) {
+				return NextResponse.redirect(new URL('/dashboard/my-lessons', request.url))
+			}
+			if (pathname.startsWith('/dashboard') && !pathname.startsWith('/dashboard/my-lessons')) {
+				return NextResponse.redirect(new URL('/dashboard/my-lessons', request.url))
+			}
+			return NextResponse.next()
+		}
+
 		const onboardingComplete = role === 'trainer' ? onboardingStep >= 2 : onboardingStep >= 1
 
 		if (pathname.startsWith('/dashboard') && !onboardingComplete) {

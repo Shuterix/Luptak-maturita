@@ -38,6 +38,7 @@ export interface Couple {
 
 export interface GroupLesson {
 	groupName: string // e.g., 'juniors1', 'juniors2'
+	lessonName?: string // optional custom display name for the lesson (e.g., "Beginners Waltz")
 	lessonsTarget: {
 		count: number // number of lessons
 		timeScope: 'weekend' | 'week' | 'month' | 'timetable' // time period for the target
@@ -69,6 +70,7 @@ export interface TimetableLesson {
 	lessonType?: "individual" | "couple" | "group" // specific lesson type
 	duration: number
 	groupName?: string // for group lessons
+	lessonName?: string // custom display name for group lessons
 	breakType?: "consecutive" | "default" // Optional field to distinguish break types
 	breakFor?: "teacher" | "student" // Indicates who the break is for
 	breakForName?: string // Name of the teacher or student the break is for
@@ -962,6 +964,7 @@ export function generateTimetable(
 							lessonType: "group",
 							duration: lessonDuration,
 							groupName: groupLesson.groupName,
+							lessonName: groupLesson.lessonName,
 							student: null,
 						})
 
@@ -1071,6 +1074,7 @@ export function generateTimetable(
 							lessonType: "group",
 							duration: lessonDuration,
 							groupName: groupLesson.groupName,
+							lessonName: groupLesson.lessonName,
 							student: null,
 						})
 
@@ -2191,6 +2195,23 @@ function generateTimetableWithState(
 		teacherCooldown[t.name] = 0
 	})
 
+	// For group lessons, the meaning of "Per Week" must not reset daily.
+	// We treat a "week" as a 7-day block starting from timetable start (dayIndex 0..6, 7..13, ...).
+	// This makes behavior consistent regardless of timetable length:
+	// - timetable length <= 7 days => at most one "Per Week" group lesson
+	// - longer timetables => one per each additional 7-day block
+	const getScopedGroupLessonCountKey = (g: GroupLesson, groupIndex: number): string | null => {
+		const baseKey = getGroupLessonKey(g, groupIndex)
+		if (g.lessonsTarget.timeScope === 'timetable') return baseKey
+		// "week" and "weekend" are both scoped to 7-day blocks starting from timetable start.
+		// This avoids resetting the counter daily when generating multi-day timetables.
+		if (g.lessonsTarget.timeScope === 'week') return `${baseKey}__week_${Math.floor(dayIndex / 7)}`
+		if (g.lessonsTarget.timeScope === 'weekend') return `${baseKey}__weekend_${Math.floor(dayIndex / 7)}`
+		// Month scope: use calendar month so it resets on month boundary.
+		if (g.lessonsTarget.timeScope === 'month') return `${baseKey}__month_${date.slice(0, 7)}`
+		return null
+	}
+
 	// Initialize group lesson tracking (only for non-timetable timeScope, timetable is tracked in parent)
 	const localGroupLessonsCount: Record<string, number> = {}
 	const coupleLessonsCount: Record<string, number> = {}
@@ -2336,11 +2357,12 @@ function generateTimetableWithState(
 		
 		// Get unique key for this group lesson configuration
 		const groupLessonKey = getGroupLessonKey(groupLesson, groupIndex)
+		const scopedCountKey = getScopedGroupLessonCountKey(groupLesson, groupIndex)
 		
 		// Check if we've met the target for this group
-		// For timetable timeScope, use the cross-day count; for others, use local count
-		const countToCheck = groupLesson.lessonsTarget.timeScope === 'timetable' 
-			? (groupLessonsCount[groupLessonKey] || 0)
+		// Use scoped cross-day count when available (timetable/week/weekend/month); otherwise fall back to local (per-day).
+		const countToCheck = scopedCountKey
+			? (groupLessonsCount[scopedCountKey] || 0)
 			: (localGroupLessonsCount[groupLesson.groupName] || 0)
 		if (countToCheck >= groupLesson.lessonsTarget.count) {
 			continue
@@ -2448,12 +2470,13 @@ function generateTimetableWithState(
 							lessonType: "group",
 							duration: lessonDuration,
 							groupName: groupLesson.groupName,
+							lessonName: groupLesson.lessonName,
 							student: null,
 						})
 
 						// Update count based on timeScope
-						if (groupLesson.lessonsTarget.timeScope === 'timetable') {
-							groupLessonsCount[groupLessonKey] = (groupLessonsCount[groupLessonKey] || 0) + 1
+						if (scopedCountKey) {
+							groupLessonsCount[scopedCountKey] = (groupLessonsCount[scopedCountKey] || 0) + 1
 						} else {
 							localGroupLessonsCount[groupLesson.groupName] = (localGroupLessonsCount[groupLesson.groupName] || 0) + 1
 						}
@@ -2474,10 +2497,11 @@ function generateTimetableWithState(
 					if (teacherCooldown[t] > 0) teacherCooldown[t]--
 				}
 				
-				// Check if we've already met the target for this group lesson on this day
-				// For timetable timeScope, check cross-day count; for others, check local count
-				const currentCount = groupLesson.lessonsTarget.timeScope === 'timetable' 
-					? (groupLessonsCount[groupLessonKey] || 0)
+				// Check if we've already met the target for this group lesson within its timeScope.
+				// IMPORTANT: week/weekend/month must NOT reset daily.
+				const scopedKeyForLoop = getScopedGroupLessonCountKey(groupLesson, groupIndex)
+				const currentCount = scopedKeyForLoop
+					? (groupLessonsCount[scopedKeyForLoop] || 0)
 					: (localGroupLessonsCount[groupLesson.groupName] || 0)
 				
 				if (currentCount >= groupLesson.lessonsTarget.count) {
@@ -2581,12 +2605,14 @@ function generateTimetableWithState(
 							lessonType: "group",
 							duration: lessonDuration,
 							groupName: groupLesson.groupName,
+							lessonName: groupLesson.lessonName,
 							student: null,
 						})
 
 						// Update count based on timeScope
-						if (groupLesson.lessonsTarget.timeScope === 'timetable') {
-							groupLessonsCount[groupLessonKey] = (groupLessonsCount[groupLessonKey] || 0) + 1
+						const scopedKeyToInc = getScopedGroupLessonCountKey(groupLesson, groupIndex)
+						if (scopedKeyToInc) {
+							groupLessonsCount[scopedKeyToInc] = (groupLessonsCount[scopedKeyToInc] || 0) + 1
 						} else {
 							localGroupLessonsCount[groupLesson.groupName] = (localGroupLessonsCount[groupLesson.groupName] || 0) + 1
 						}
@@ -2634,9 +2660,11 @@ function generateTimetableWithState(
 			// Get unique key for this group lesson configuration
 			const groupLessonKey = getGroupLessonKey(groupLesson, groupIndex)
 			
-			// Check if we've met the target (for timetable timeScope, use cross-day count)
-			const countToCheck = groupLesson.lessonsTarget.timeScope === 'timetable' 
-				? (groupLessonsCount[groupLessonKey] || 0)
+			// Check if we've met the target for this group lesson within its timeScope.
+			// IMPORTANT: week/weekend/month must NOT reset daily.
+			const scopedKey = getScopedGroupLessonCountKey(groupLesson, groupIndex)
+			const countToCheck = scopedKey
+				? (groupLessonsCount[scopedKey] || 0)
 				: (localGroupLessonsCount[groupLesson.groupName] || 0)
 			if (countToCheck >= groupLesson.lessonsTarget.count) return false
 			

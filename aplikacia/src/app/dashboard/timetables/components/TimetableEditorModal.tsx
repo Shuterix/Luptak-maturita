@@ -5,6 +5,7 @@ import { Button, Input, Alert } from '@/components'
 
 interface GroupLesson {
 	groupName: string
+	lessonName?: string // Custom display name for this group lesson (shown on timetable cards)
 	lessonsTarget: {
 		count: number
 		timeScope: 'weekend' | 'week' | 'month' | 'timetable'
@@ -93,6 +94,7 @@ export function TimetableEditorModal({
 
 	const [formData, setFormData] = useState({
 		groupName: '',
+		lessonName: '', // Custom display name for the group lesson
 		lessonsTarget: {
 			count: 1,
 			timeScope: 'week' as 'weekend' | 'week' | 'month' | 'timetable',
@@ -163,6 +165,7 @@ export function TimetableEditorModal({
 
 		const newGroup: GroupLesson = {
 			groupName: formData.groupName,
+			lessonName: formData.lessonName || undefined,
 			lessonsTarget: formData.lessonsTarget,
 			teachers: formData.selectedTeachers,
 			participants: formData.selectedParticipants,
@@ -211,6 +214,7 @@ export function TimetableEditorModal({
 
 		setFormData({
 			groupName: '',
+			lessonName: '',
 			lessonsTarget: {
 				count: 1,
 				timeScope: 'week',
@@ -364,6 +368,18 @@ export function TimetableEditorModal({
 										</option>
 									))}
 								</select>
+							</label>
+
+							<label className="form-control">
+								<span className="label-text">Lesson name <span className="text-base-content/40">(optional)</span></span>
+								<Input
+									value={formData.lessonName}
+									onChange={(e) => setFormData((prev) => ({ ...prev, lessonName: e.target.value }))}
+									placeholder={formData.groupName ? `e.g. ${formData.groupName} Waltz` : 'e.g. Beginners Waltz'}
+								/>
+								<span className="label-text-alt text-base-content/50">
+									A custom name shown on each lesson card. If empty, only the group name is displayed.
+								</span>
 							</label>
 
 							<div className="grid gap-4 sm:grid-cols-2">
@@ -762,6 +778,9 @@ export function TimetableEditorModal({
 								<div>
 									<p className="text-sm text-base-content/60">Group</p>
 									<p className="text-lg font-semibold text-base-content">{formData.groupName || 'Not set'}</p>
+									{formData.lessonName && (
+										<p className="text-sm text-base-content/70">Lesson: {formData.lessonName}</p>
+									)}
 								</div>
 								<span className="badge badge-primary badge-outline">
 									{formData.lessonsTarget.count}× per {
@@ -906,7 +925,10 @@ export function TimetableEditorModal({
 							{groupLessons.map((group, index) => (
 									<div key={index} className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 p-3 rounded-xl border border-base-300 bg-accent/20 hover:bg-accent/30 transition-colors">
 									<div className="flex flex-col gap-1">
-										<span className="font-medium text-base-content">{group.groupName}</span>
+										<span className="font-medium text-base-content">
+											{group.groupName}
+											{group.lessonName && <span className="text-base-content/60 font-normal"> — {group.lessonName}</span>}
+										</span>
 										<span className="text-xs text-base-content/70">
 											{group.lessonsTarget?.count ?? 0}× per {group.lessonsTarget?.timeScope ?? 'week'}
 												{' · '}{group.duration ?? 45} min
@@ -924,6 +946,7 @@ export function TimetableEditorModal({
 											setCurrentGroupIndex(index)
 											setFormData({
 												groupName: group.groupName,
+												lessonName: group.lessonName || '',
 												lessonsTarget: group.lessonsTarget || {
 													count: 1,
 													timeScope: 'week' as 'weekend' | 'week' | 'month' | 'timetable',
@@ -960,6 +983,7 @@ export function TimetableEditorModal({
 														setCurrentGroupIndex(updatedGroups.length)
 														setFormData({
 															groupName: '',
+															lessonName: '',
 															lessonsTarget: { count: 1, timeScope: 'week' as const },
 															selectedTeachers: [],
 															staticTimeSlot: { dayOfWeek: 'monday', startTime: '17:00', enabled: false },

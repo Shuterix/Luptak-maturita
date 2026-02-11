@@ -5,3 +5,7 @@
 		dark --prefersdark,
 		cupcake;
 }
+
+input {
+	outline: none !important;
+}

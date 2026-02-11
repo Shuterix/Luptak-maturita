@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { Users, GraduationCap, UserCheck, Mail, Phone, Heart, Key, RefreshCw, Copy, Check, UsersRound } from 'lucide-react'
+import { Users, GraduationCap, UserCheck, Mail, Phone, Heart, Key, RefreshCw, Copy, Check, UsersRound, UserPlus, Trash2, ExternalLink } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { showAlertToast } from '@/components/toast/Toast'
 
@@ -32,6 +32,13 @@ interface GroupData {
 	coupleCount?: number
 	createdAt?: string
 	updatedAt?: string
+}
+
+interface ExternalTeacherData {
+	_id: string
+	name: string
+	code: string
+	createdAt?: string
 }
 
 interface PairData {
@@ -65,10 +72,15 @@ export default function ClubOverviewPage() {
 	const [pairs, setPairs] = useState<PairData[]>([])
 	const [club, setClub] = useState<ClubData | null>(null)
 	const [groups, setGroups] = useState<GroupData[]>([])
+	const [externalTeachers, setExternalTeachers] = useState<ExternalTeacherData[]>([])
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
 	const [regenerating, setRegenerating] = useState(false)
 	const [copied, setCopied] = useState(false)
+	const [copiedTeacherCode, setCopiedTeacherCode] = useState<string | null>(null)
+	const [newTeacherName, setNewTeacherName] = useState('')
+	const [addingTeacher, setAddingTeacher] = useState(false)
+	const [deletingTeacherId, setDeletingTeacherId] = useState<string | null>(null)
 	const isMobile = useMediaQuery('(max-width: 768px)')
 
 	useEffect(() => {
@@ -89,21 +101,23 @@ export default function ClubOverviewPage() {
 			}
 
 			// Fetch all data in parallel for faster loading
-			const [clubRes, studentsRes, trainersRes, pairsRes, groupsRes] = await Promise.all([
+			const [clubRes, studentsRes, trainersRes, pairsRes, groupsRes, extTeachersRes] = await Promise.all([
 				fetch(`/api/clubs/${user.clubId}`, { cache: 'no-store' }),
 				fetch(`/api/users?clubId=${user.clubId}&role=student`, { cache: 'no-store' }),
 				fetch(`/api/users?clubId=${user.clubId}&role=trainer`, { cache: 'no-store' }),
 				fetch('/api/pairs', { cache: 'no-store' }),
 				fetch('/api/groups', { cache: 'no-store' }),
+				fetch('/api/external-teachers', { cache: 'no-store' }),
 			])
 
 			// Process responses in parallel
-			const [clubData, studentsData, trainersData, pairsData, groupsData] = await Promise.all([
+			const [clubData, studentsData, trainersData, pairsData, groupsData, extTeachersData] = await Promise.all([
 				clubRes.ok ? clubRes.json() : null,
 				studentsRes.ok ? studentsRes.json() : null,
 				trainersRes.ok ? trainersRes.json() : null,
 				pairsRes.ok ? pairsRes.json() : null,
 				groupsRes.ok ? groupsRes.json() : null,
+				extTeachersRes.ok ? extTeachersRes.json() : null,
 			])
 
 			// Update state with results
@@ -131,6 +145,10 @@ export default function ClubOverviewPage() {
 
 			if (groupsData?.groups) {
 				setGroups(groupsData.groups)
+			}
+
+			if (extTeachersData?.teachers) {
+				setExternalTeachers(extTeachersData.teachers)
 			}
 		} catch (err: any) {
 			console.error('Error fetching club members:', err)
@@ -181,6 +199,72 @@ export default function ClubOverviewPage() {
 		} catch (err) {
 			console.error('Failed to copy code:', err)
 			showAlertToast('Failed to copy code', { variant: 'error' })
+		}
+	}
+
+	const handleCopyTeacherCode = async (code: string) => {
+		try {
+			await navigator.clipboard.writeText(code)
+			setCopiedTeacherCode(code)
+			showAlertToast('Teacher code copied to clipboard', { variant: 'success' })
+			setTimeout(() => setCopiedTeacherCode(null), 2000)
+		} catch (err) {
+			console.error('Failed to copy teacher code:', err)
+			showAlertToast('Failed to copy code', { variant: 'error' })
+		}
+	}
+
+	const handleAddExternalTeacher = async () => {
+		if (!newTeacherName.trim()) return
+
+		setAddingTeacher(true)
+		try {
+			const res = await fetch('/api/external-teachers', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name: newTeacherName.trim() }),
+			})
+
+			if (!res.ok) {
+				const data = await res.json()
+				throw new Error(data.error || 'Failed to add external teacher')
+			}
+
+			const data = await res.json()
+			setExternalTeachers((prev) => [...prev, data.teacher].sort((a, b) => a.name.localeCompare(b.name)))
+			setNewTeacherName('')
+			showAlertToast('External teacher added successfully', { variant: 'success' })
+		} catch (err: any) {
+			console.error('Error adding external teacher:', err)
+			showAlertToast(err.message || 'Failed to add external teacher', { variant: 'error' })
+		} finally {
+			setAddingTeacher(false)
+		}
+	}
+
+	const handleDeleteExternalTeacher = async (teacherId: string, teacherName: string) => {
+		if (!confirm(`Are you sure you want to remove "${teacherName}"? This action cannot be undone.`)) {
+			return
+		}
+
+		setDeletingTeacherId(teacherId)
+		try {
+			const res = await fetch(`/api/external-teachers/${teacherId}`, {
+				method: 'DELETE',
+			})
+
+			if (!res.ok) {
+				const data = await res.json()
+				throw new Error(data.error || 'Failed to delete external teacher')
+			}
+
+			setExternalTeachers((prev) => prev.filter((t) => t._id !== teacherId))
+			showAlertToast('External teacher removed', { variant: 'success' })
+		} catch (err: any) {
+			console.error('Error deleting external teacher:', err)
+			showAlertToast(err.message || 'Failed to delete external teacher', { variant: 'error' })
+		} finally {
+			setDeletingTeacherId(null)
 		}
 	}
 
@@ -381,7 +465,7 @@ export default function ClubOverviewPage() {
 			</header>
 
 			{/* Stats Cards */}
-			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
 				<div className="card bg-base-100 shadow-md border border-base-300">
 					<div className="card-body p-4 sm:p-6">
 						<div className="flex items-center gap-3">
@@ -434,6 +518,21 @@ export default function ClubOverviewPage() {
 						</div>
 					</div>
 				</div>
+				{user?.role === 'trainer' && (
+					<div className="card bg-base-100 shadow-md border border-base-300">
+						<div className="card-body p-4 sm:p-6">
+							<div className="flex items-center gap-3">
+								<div className="p-3 bg-warning/20 rounded-lg">
+									<ExternalLink className="h-6 w-6 text-warning" />
+								</div>
+								<div>
+									<p className="text-sm text-base-content/60">External</p>
+									<p className="text-2xl font-bold">{externalTeachers.length}</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
 			</div>
 
 			{/* Trainers Section */}
@@ -457,6 +556,94 @@ export default function ClubOverviewPage() {
 					</div>
 				)}
 			</section>
+
+			{/* External Teachers Section - Only for trainers */}
+			{user?.role === 'trainer' && (
+				<section>
+					<div className="flex items-center gap-2 mb-4">
+						<ExternalLink className="h-5 w-5 text-warning" />
+						<h2 className="text-xl font-semibold">External Teachers</h2>
+						<span className="badge badge-outline">{externalTeachers.length}</span>
+					</div>
+					<p className="text-sm text-base-content/60 mb-4">
+						Permanent external teachers for your club. Share their login code so they can view their upcoming lessons. Set their availability when creating timetables.
+					</p>
+
+					{/* Add new external teacher */}
+					<div className="flex items-center gap-2 mb-4">
+						<input
+							type="text"
+							placeholder="Teacher name..."
+							className="input input-bordered input-sm flex-1 max-w-xs"
+							value={newTeacherName}
+							onChange={(e) => setNewTeacherName(e.target.value)}
+							onKeyDown={(e) => e.key === 'Enter' && handleAddExternalTeacher()}
+							disabled={addingTeacher}
+						/>
+						<button
+							onClick={handleAddExternalTeacher}
+							disabled={addingTeacher || !newTeacherName.trim()}
+							className="btn btn-primary btn-sm gap-2"
+						>
+							{addingTeacher ? (
+								<span className="loading loading-spinner loading-xs"></span>
+							) : (
+								<UserPlus className="h-4 w-4" />
+							)}
+							Add
+						</button>
+					</div>
+
+					{externalTeachers.length === 0 ? (
+						<div className="card bg-base-100 border border-base-300">
+							<div className="card-body text-center py-8">
+								<p className="text-base-content/60">No external teachers yet. Add one above to get started.</p>
+							</div>
+						</div>
+					) : (
+						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+							{externalTeachers.map((teacher) => (
+								<div key={teacher._id} className="card bg-base-100 shadow-md border border-base-300 hover:shadow-lg transition-shadow">
+									<div className="card-body p-4">
+										<div className="flex items-start justify-between gap-2">
+											<div className="flex-1 min-w-0">
+												<h3 className="font-semibold text-base truncate">{teacher.name}</h3>
+												<div className="flex items-center gap-2 mt-2">
+													<Key className="h-3.5 w-3.5 text-warning flex-shrink-0" />
+													<code className="text-sm font-mono font-bold text-warning">{teacher.code}</code>
+													<button
+														onClick={() => handleCopyTeacherCode(teacher.code)}
+														className="btn btn-ghost btn-xs btn-square"
+														title="Copy code"
+													>
+														{copiedTeacherCode === teacher.code ? (
+															<Check className="h-3 w-3 text-success" />
+														) : (
+															<Copy className="h-3 w-3" />
+														)}
+													</button>
+												</div>
+											</div>
+											<button
+												onClick={() => handleDeleteExternalTeacher(teacher._id, teacher.name)}
+												disabled={deletingTeacherId === teacher._id}
+												className="btn btn-ghost btn-sm btn-square text-error hover:bg-error/10"
+												title="Remove teacher"
+											>
+												{deletingTeacherId === teacher._id ? (
+													<span className="loading loading-spinner loading-xs"></span>
+												) : (
+													<Trash2 className="h-4 w-4" />
+												)}
+											</button>
+										</div>
+									</div>
+								</div>
+							))}
+						</div>
+					)}
+				</section>
+			)}
 
 			{/* Groups Section */}
 			<section>

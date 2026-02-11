@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import connectToDatabase from '@/lib/mongodb'
 import User from '@/models/User'
+import ExternalTeacher from '@/models/ExternalTeacher'
 import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
 
@@ -19,6 +20,23 @@ export async function GET() {
 			decoded = jwt.verify(token, process.env.JWT_SECRET as string)
 		} catch {
 			return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+		}
+
+		// Handle external teacher tokens
+		if (decoded.role === 'external_teacher' && decoded.externalTeacherId) {
+			const teacher = await ExternalTeacher.findById(decoded.externalTeacherId).lean() as any
+			if (!teacher) return NextResponse.json({ error: 'External teacher not found' }, { status: 404 })
+
+			return NextResponse.json({
+				user: {
+					_id: teacher._id,
+					firstName: teacher.name,
+					lastName: '',
+					role: 'external_teacher',
+					clubId: teacher.clubId,
+					onboardingStep: 2,
+				},
+			}, { status: 200 })
 		}
 
 		const user = await User.findById(decoded.userId).lean()
