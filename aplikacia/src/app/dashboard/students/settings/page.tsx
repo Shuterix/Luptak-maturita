@@ -6,6 +6,7 @@ import { Button, Input, Alert } from '@/components'
 import { showAlertToast } from '@/components/toast/Toast'
 import ResponsiveModal from '@/components/ResponsiveModal'
 import { Clock, User, Users, Calendar, Save, ChevronDown, ChevronUp, Edit2 } from 'lucide-react'
+import AvailabilityEditor from '@/components/AvailabilityEditor'
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
 
@@ -208,11 +209,11 @@ export default function StudentSettingsPage() {
 	}
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-4 sm:space-y-6">
 			{/* Header */}
 			<div className="flex items-center justify-between">
-				<h1 className="text-3xl font-bold flex items-center gap-2">
-					<User className="h-8 w-8 text-primary" />
+				<h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+					<User className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
 					Profile
 				</h1>
 			</div>
@@ -232,72 +233,25 @@ export default function StudentSettingsPage() {
 			{/* Weekly Unavailability Section */}
 			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
 				<div className="card-body">
-					<h2 className="card-title flex items-center gap-2 mb-4">
+					<h2 className="card-title flex items-center gap-2 mb-2">
 						<Clock className="h-5 w-5" />
 						Weekly Unavailability
 					</h2>
-					<p className="text-sm text-base-content/70 mb-6">
-						Set the times when you <strong>CANNOT</strong> train (e.g., school hours, work). 
-						Leave empty if you're available anytime. Teachers will schedule your lessons outside these times.
+					<p className="text-sm text-base-content/70 mb-4">
+						Set the times when you <strong>CANNOT</strong> train. 
+						Leave empty if available anytime. Use presets for quick setup.
 					</p>
 
-					<div className="space-y-6">
-						{(Object.keys(DAY_LABELS) as DayOfWeek[]).map((day) => (
-							<div key={day} className="border-b border-base-300 pb-4 last:border-b-0">
-								<div className="flex items-center justify-between mb-3">
-									<h3 className="font-semibold text-base-content">{DAY_LABELS[day]}</h3>
-									<Button
-										type="button"
-										className="btn-sm btn-outline"
-										onClick={() => addTimeWindow(day)}
-									>
-										+ Add Unavailable Time
-									</Button>
-								</div>
-
-								{(!unavailability[day] || unavailability[day]!.length === 0) && (
-									<p className="text-sm text-success/70 italic">
-										✓ Available all day
-									</p>
-								)}
-
-								<div className="space-y-3">
-									{unavailability[day]?.map((window, index) => (
-										<div key={index} className="flex items-center gap-3 flex-wrap bg-error/5 p-2 rounded-lg border border-error/20">
-											<span className="text-error/70 text-sm">Cannot train:</span>
-											<Input
-												type="time"
-												label="From"
-												value={window.start}
-												onChange={(e) => updateTimeWindow(day, index, 'start', e.target.value)}
-												className="flex-1 min-w-[120px]"
-											/>
-											<span className="text-base-content/60">to</span>
-											<Input
-												type="time"
-												label="Until"
-												value={window.end}
-												onChange={(e) => updateTimeWindow(day, index, 'end', e.target.value)}
-												className="flex-1 min-w-[120px]"
-											/>
-											<Button
-												type="button"
-												className="btn-sm btn-ghost text-error"
-												onClick={() => removeTimeWindow(day, index)}
-											>
-												Remove
-											</Button>
-										</div>
-									))}
-								</div>
-							</div>
-						))}
-					</div>
+					<AvailabilityEditor
+						unavailability={unavailability}
+						onChange={setUnavailability}
+						activityLabel="train"
+					/>
 
 					<div className="mt-6 flex justify-end">
 						<Button
 							type="button"
-							className="btn-primary"
+							className="btn-primary btn-sm sm:btn-md"
 							onClick={handleSaveUnavailability}
 							disabled={saving}
 						>
@@ -367,29 +321,29 @@ export default function StudentSettingsPage() {
 
 			{/* Profile Information Section */}
 			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
-				<div className="card-body">
-					<h2 className="card-title flex items-center gap-2 mb-4">
+				<div className="card-body p-4 sm:p-6">
+					<h2 className="card-title text-base sm:text-lg flex items-center gap-2 mb-2 sm:mb-4">
 						<User className="h-5 w-5" />
 						Profile Information
 					</h2>
-					<p className="text-sm text-base-content/70 mb-6">
+					<p className="text-xs sm:text-sm text-base-content/70 mb-4 sm:mb-6">
 						Update your personal information. Teachers may use this to contact you.
 					</p>
 
-					<div className="space-y-4">
+					<div className="space-y-3 sm:space-y-4">
 						<div>
-							<label className="label">
-								<span className="label-text font-medium">Email</span>
+							<label className="label py-1">
+								<span className="label-text text-xs sm:text-sm font-medium">Email</span>
 							</label>
 							<Input type="email" value={user.email || ''} disabled className="bg-base-200" />
-							<p className="text-xs text-base-content/50 mt-1">Email cannot be changed</p>
+							<p className="text-[11px] sm:text-xs text-base-content/50 mt-1">Email cannot be changed</p>
 						</div>
 
 						<div>
-							<label className="label">
-								<span className="label-text font-medium">Name</span>
+							<label className="label py-1">
+								<span className="label-text text-xs sm:text-sm font-medium">Name</span>
 							</label>
-							<div className="grid grid-cols-2 gap-3">
+							<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
 								<Input
 									type="text"
 									value={user.firstName || ''}
@@ -405,14 +359,14 @@ export default function StudentSettingsPage() {
 									placeholder="Last Name"
 								/>
 							</div>
-							<p className="text-xs text-base-content/50 mt-1">
+							<p className="text-[11px] sm:text-xs text-base-content/50 mt-1">
 								Name changes require administrator approval
 							</p>
 						</div>
 
 						<div>
-							<label className="label">
-								<span className="label-text font-medium">Phone Number</span>
+							<label className="label py-1">
+								<span className="label-text text-xs sm:text-sm font-medium">Phone Number</span>
 							</label>
 							<Input
 								type="tel"

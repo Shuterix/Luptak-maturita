@@ -26,7 +26,7 @@ export default async function DashboardLayout({
 			<input id="my-drawer" type="checkbox" className="drawer-toggle" />
 			<div className="drawer-content flex flex-col">
 				<NavbarMobile />
-				<main className="flex-1 sm:p-8 p-4 bg-base-200 min-h-screen">
+				<main className="flex-1 p-3 sm:p-6 lg:p-8 bg-base-200 min-h-screen">
 					{children}
 				</main>
 			</div>

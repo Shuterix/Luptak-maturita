@@ -75,53 +75,65 @@ export function TimetableConfigModal({ isOpen, onClose, form, onSave }: Timetabl
 	}
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-base-content/60 p-4">
-			<div className="w-full max-w-2xl rounded-2xl bg-base-200 shadow-2xl border border-base-300 max-h-[90vh] overflow-y-auto">
-				<div className="flex items-center justify-between border-b border-base-300 px-6 py-4 sticky top-0 bg-base-200 z-10">
-					<h3 className="text-lg font-semibold text-base-content">Timetable Configuration</h3>
-					<button type="button" className="btn btn-ghost btn-sm" onClick={handleClose}>
+		<div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+			<div className="w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl bg-base-200 shadow-2xl border border-base-300 max-h-[95vh] sm:max-h-[90vh] sm:mx-4 overflow-y-auto">
+				{/* Mobile drag indicator */}
+				<div className="flex justify-center pt-2 sm:hidden">
+					<div className="w-12 h-1.5 bg-base-300 rounded-full" />
+				</div>
+				<div className="flex items-center justify-between border-b border-base-300 px-4 sm:px-6 py-3 sm:py-4 sticky top-0 bg-base-200 z-10">
+					<h3 className="text-base sm:text-lg font-semibold text-base-content">Timetable Configuration</h3>
+					<button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={handleClose}>
 						✕
 					</button>
 				</div>
 
-				<div className="p-6 space-y-6">
+				<div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
 					{error && (
 						<Alert variant="error">
 							{error}
 						</Alert>
 					)}
 
-					{/* Timetable Name */}
-					<div className="space-y-4">
+					{/* Timetable Info */}
+					<div className="bg-base-100 rounded-xl p-3 sm:p-4 border border-base-300 space-y-3">
 						<div className="space-y-1">
-							<h3 className="text-lg font-semibold text-base-content">Timetable Info</h3>
-							<p className="text-sm text-base-content/60">Change the timetable name, type, and date range.</p>
+							<h3 className="text-sm sm:text-base font-semibold text-base-content">Timetable Info</h3>
+							<p className="text-xs sm:text-sm text-base-content/60">Name, type, and date range.</p>
 						</div>
 						<label className="form-control">
-							<span className="label-text">Timetable Name</span>
+							<span className="label-text text-xs sm:text-sm">Timetable Name</span>
 							<Input
 								value={localForm.name}
 								onChange={(e) => setLocalForm({ ...localForm, name: e.target.value })}
 								placeholder="e.g. Spring Season 2026"
 							/>
 						</label>
-						<label className="form-control">
-							<span className="label-text">Type</span>
-							<select
-								className="select select-bordered"
-								value={localForm.type}
-								onChange={(e) => setLocalForm({ ...localForm, type: e.target.value as TimetableType })}
-							>
+
+						{/* Type as pill selector */}
+						<div className="form-control">
+							<span className="label-text text-xs sm:text-sm mb-1.5">Type</span>
+							<div className="flex flex-wrap gap-1.5">
 								{timetableTypes.map((t) => (
-									<option key={t.value} value={t.value}>
+									<button
+										key={t.value}
+										type="button"
+										onClick={() => setLocalForm({ ...localForm, type: t.value })}
+										className={`btn btn-sm rounded-full ${
+											localForm.type === t.value
+												? 'btn-primary'
+												: 'btn-outline'
+										}`}
+									>
 										{t.label}
-									</option>
+									</button>
 								))}
-							</select>
-						</label>
-						<div className="grid grid-cols-2 gap-4">
+							</div>
+						</div>
+
+						<div className="grid grid-cols-2 gap-3">
 							<label className="form-control">
-								<span className="label-text">Start Date</span>
+								<span className="label-text text-xs sm:text-sm">Start Date</span>
 								<Input
 									type="date"
 									value={localForm.startDate}
@@ -129,7 +141,7 @@ export function TimetableConfigModal({ isOpen, onClose, form, onSave }: Timetabl
 								/>
 							</label>
 							<label className="form-control">
-								<span className="label-text">End Date</span>
+								<span className="label-text text-xs sm:text-sm">End Date</span>
 								<Input
 									type="date"
 									value={localForm.endDate}
@@ -139,18 +151,19 @@ export function TimetableConfigModal({ isOpen, onClose, form, onSave }: Timetabl
 							</label>
 						</div>
 						{localForm.type === 'weekly' && !localForm.startDate && !localForm.endDate && (
-							<p className="text-xs text-base-content/50">Dates are optional for weekly universal templates. Leave empty for a reusable template.</p>
+							<p className="text-[11px] sm:text-xs text-base-content/50">Dates are optional for weekly templates.</p>
 						)}
 					</div>
 
-					<div className="space-y-4">
+					{/* Schedule Settings */}
+					<div className="bg-base-100 rounded-xl p-3 sm:p-4 border border-base-300 space-y-3">
 						<div className="space-y-1">
-							<h3 className="text-lg font-semibold text-base-content">Schedule Settings</h3>
-							<p className="text-sm text-base-content/60">Configure daily hours and default lesson settings.</p>
+							<h3 className="text-sm sm:text-base font-semibold text-base-content">Schedule Settings</h3>
+							<p className="text-xs sm:text-sm text-base-content/60">Daily hours and lesson settings.</p>
 						</div>
-						<div className="grid grid-cols-2 gap-4">
+						<div className="grid grid-cols-2 gap-3">
 							<label className="form-control">
-								<span className="label-text">Day Start</span>
+								<span className="label-text text-xs sm:text-sm">Day Start</span>
 								<Input
 									type="time"
 									step={localForm.slotMinutes * 60}
@@ -159,7 +172,7 @@ export function TimetableConfigModal({ isOpen, onClose, form, onSave }: Timetabl
 								/>
 							</label>
 							<label className="form-control">
-								<span className="label-text">Day End</span>
+								<span className="label-text text-xs sm:text-sm">Day End</span>
 								<Input
 									type="time"
 									step={localForm.slotMinutes * 60}
@@ -168,47 +181,52 @@ export function TimetableConfigModal({ isOpen, onClose, form, onSave }: Timetabl
 								/>
 							</label>
 						</div>
-						<div className="grid grid-cols-2 gap-4">
+						<div className="grid grid-cols-2 gap-3">
 							<label className="form-control">
-								<span className="label-text">Default Lesson Duration (minutes)</span>
-								<Input
-									type="number"
-									min={15}
-									step={5}
-									value={localForm.defaultLessonDuration}
-									onChange={(e) =>
-										setLocalForm({ ...localForm, defaultLessonDuration: Number(e.target.value) })
-									}
-								/>
+								<span className="label-text text-xs sm:text-sm">Lesson Duration (min)</span>
+								<div className="flex items-center gap-1">
+									<button type="button" className="btn btn-sm btn-circle btn-ghost" onClick={() => setLocalForm(prev => ({ ...prev, defaultLessonDuration: Math.max(15, prev.defaultLessonDuration - 5) }))}>−</button>
+									<Input
+										type="number"
+										min={15}
+										step={5}
+										value={localForm.defaultLessonDuration}
+										onChange={(e) =>
+											setLocalForm({ ...localForm, defaultLessonDuration: Number(e.target.value) })
+										}
+										className="text-center"
+									/>
+									<button type="button" className="btn btn-sm btn-circle btn-ghost" onClick={() => setLocalForm(prev => ({ ...prev, defaultLessonDuration: prev.defaultLessonDuration + 5 }))}>+</button>
+								</div>
 							</label>
 							<label className="form-control">
-								<span className="label-text">Slot Minutes</span>
-								<select
-									className="select select-bordered"
-									value={localForm.slotMinutes}
-									onChange={(e) =>
-										setLocalForm({
-											...localForm,
-											slotMinutes: Number(e.target.value) as (typeof SLOT_MINUTES)[number],
-										})
-									}
-								>
+								<span className="label-text text-xs sm:text-sm">Grid Slot</span>
+								<div className="flex flex-wrap gap-1.5 mt-1">
 									{SLOT_MINUTES.map((minutes) => (
-										<option key={minutes} value={minutes}>
-											{minutes} minutes
-										</option>
+										<button
+											key={minutes}
+											type="button"
+											onClick={() => setLocalForm({ ...localForm, slotMinutes: minutes })}
+											className={`btn btn-xs rounded-full ${
+												localForm.slotMinutes === minutes
+													? 'btn-primary'
+													: 'btn-outline'
+											}`}
+										>
+											{minutes}m
+										</button>
 									))}
-								</select>
+								</div>
 							</label>
 						</div>
 					</div>
 
 					{/* Navigation */}
-					<div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-base-300">
-						<Button type="button" className="btn-outline" onClick={handleClose}>
+					<div className="flex items-center justify-end gap-3 pt-3 sm:pt-4 border-t border-base-300 sticky bottom-0 bg-base-200 pb-2 -mx-4 sm:-mx-6 px-4 sm:px-6">
+						<Button type="button" className="btn-ghost btn-sm sm:btn-md" onClick={handleClose}>
 							Cancel
 						</Button>
-						<Button type="button" className="btn-primary" onClick={handleSave}>
+						<Button type="button" className="btn-primary btn-sm sm:btn-md" onClick={handleSave}>
 							Save Settings
 						</Button>
 					</div>

@@ -221,21 +221,21 @@ export default function StudentDashboard() {
 	const isTrainer = user.role === 'trainer' || user.role === 'admin'
 
 	return (
-		<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+		<div className="max-w-7xl mx-auto px-2 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
 			{/* Header */}
-			<header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-				<div>
-					<h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-						<Calendar className="h-7 w-7 text-primary" />
-						{isTrainer ? 'My Teaching Schedule' : 'My Schedule'}
+			<header className="flex items-center justify-between gap-3">
+				<div className="min-w-0">
+					<h1 className="text-xl sm:text-3xl font-bold flex items-center gap-2">
+						<Calendar className="h-5 w-5 sm:h-7 sm:w-7 text-primary flex-shrink-0" />
+						<span className="truncate">{isTrainer ? 'My Teaching Schedule' : 'My Schedule'}</span>
 					</h1>
-					<p className="text-base-content/60 mt-1">
+					<p className="text-xs sm:text-base text-base-content/60 mt-0.5 sm:mt-1">
 						{upcomingCount} upcoming lesson{upcomingCount !== 1 ? 's' : ''}
 					</p>
 				</div>
-				<Button onClick={fetchLessons} className="btn-outline btn-sm gap-2" disabled={loading}>
+				<Button onClick={fetchLessons} className="btn-outline btn-sm btn-circle sm:btn-square sm:px-3 gap-2 flex-shrink-0" disabled={loading}>
 					<RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-					Refresh
+					<span className="hidden sm:inline">Refresh</span>
 				</Button>
 			</header>
 
@@ -244,23 +244,28 @@ export default function StudentDashboard() {
 			)}
 
 			{/* Week Navigation */}
-			<div className="flex items-center justify-between bg-base-100 border border-base-300 rounded-xl p-3">
-				<Button onClick={goToPreviousWeek} className="btn-ghost btn-sm">
+			<div className="flex items-center justify-between bg-base-100 border border-base-300 rounded-xl p-2 sm:p-3">
+				<Button onClick={goToPreviousWeek} className="btn-ghost btn-sm btn-circle">
 					<ChevronLeft className="h-5 w-5" />
 				</Button>
 
-				<div className="flex items-center gap-3">
-					<h2 className="text-lg font-semibold">
-						{format(currentWeekStart, 'MMM d')} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'MMM d, yyyy')}
+				<div className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-3">
+					<h2 className="text-sm sm:text-lg font-semibold text-center">
+						<span className="sm:hidden">
+							{format(currentWeekStart, 'MMM d')} – {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'MMM d')}
+						</span>
+						<span className="hidden sm:inline">
+							{format(currentWeekStart, 'MMM d')} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'MMM d, yyyy')}
+						</span>
 					</h2>
 					{!isSameDay(currentWeekStart, startOfWeek(new Date(), { weekStartsOn: 1 })) && (
-						<Button onClick={goToCurrentWeek} className="btn-ghost btn-xs">
+						<Button onClick={goToCurrentWeek} className="btn-primary btn-xs rounded-full">
 							Today
 						</Button>
 					)}
 				</div>
 
-				<Button onClick={goToNextWeek} className="btn-ghost btn-sm">
+				<Button onClick={goToNextWeek} className="btn-ghost btn-sm btn-circle">
 					<ChevronRight className="h-5 w-5" />
 				</Button>
 			</div>
@@ -324,17 +329,22 @@ export default function StudentDashboard() {
 							return (
 								<div key={dateStr} className={isCurrentDay ? 'bg-primary/5' : ''}>
 									{/* Day Header */}
-									<div className={`p-3 border-b border-base-300 ${isCurrentDay ? 'bg-primary/10' : 'bg-base-200/50'}`}>
-										<span className={`font-semibold ${isCurrentDay ? 'text-primary' : ''}`}>
-											{FULL_DAY_NAMES[date.getDay()]}, {format(date, 'MMMM d')}
+									<div className={`px-3 py-2 border-b border-base-300 flex items-center justify-between ${isCurrentDay ? 'bg-primary/10' : 'bg-base-200/50'}`}>
+										<span className={`font-semibold text-sm ${isCurrentDay ? 'text-primary' : ''}`}>
+											{DAY_NAMES[date.getDay()]}, {format(date, 'MMM d')}
 										</span>
-										{isCurrentDay && (
-											<span className="ml-2 badge badge-primary badge-sm">Today</span>
-										)}
+										<div className="flex items-center gap-1.5">
+											{isCurrentDay && (
+												<span className="badge badge-primary badge-xs">Today</span>
+											)}
+											<span className="text-xs text-base-content/40">
+												{dayLessons.length} lesson{dayLessons.length !== 1 ? 's' : ''}
+											</span>
+										</div>
 									</div>
 
 									{/* Lessons */}
-									<div className="p-3 space-y-3">
+									<div className="p-2 space-y-2">
 										{dayLessons.map((lesson) => (
 											<LessonCard
 												key={lesson._id}
@@ -349,123 +359,139 @@ export default function StudentDashboard() {
 						})}
 
 						{weekLessons.length === 0 && (
-							<div className="text-center py-12 text-base-content/50">
-								<Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
-								<p>No lessons scheduled for this week</p>
+							<div className="text-center py-10 text-base-content/50">
+								<Calendar className="h-10 w-10 mx-auto mb-2 opacity-50" />
+								<p className="text-sm">No lessons this week</p>
+								<p className="text-xs text-base-content/40 mt-1">Try navigating to a different week</p>
 							</div>
 						)}
 					</div>
 				</div>
 			)}
 
-			{/* Cancel Modal */}
+			{/* Cancel Modal - mobile-optimized */}
 			{cancelModalOpen && cancellingLesson && (
-				<div className="modal modal-open">
-					<div className="modal-box">
-						<button
-							className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
-							onClick={() => {
-								setCancelModalOpen(false)
-								setCancellingLesson(null)
-								setCancelReason('')
-							}}
-						>
-							<X className="h-4 w-4" />
-						</button>
-
-						<h3 className="font-bold text-lg flex items-center gap-2">
-							<AlertCircle className="h-5 w-5 text-warning" />
-							Cancel Lesson
-						</h3>
-
-						<div className="mt-4 space-y-4">
-							<div className="bg-base-200 rounded-lg p-4 space-y-2">
-								<p className="font-semibold text-lg">{cancellingLesson.timetableName}</p>
-								<div className="flex items-center gap-2 text-sm text-base-content/70">
-									<Calendar className="h-4 w-4" />
-									{format(parseISO(cancellingLesson.date), 'EEEE, MMMM d, yyyy')}
-								</div>
-								<div className="flex items-center gap-2 text-sm text-base-content/70">
-									<Clock className="h-4 w-4" />
-									{formatTimeRange(cancellingLesson.start, cancellingLesson.end)}
-								</div>
-								{isTrainer ? (
-									<>
-										{cancellingLesson.studentNames && cancellingLesson.studentNames.length > 0 && (
-											<div className="flex items-center gap-2 text-sm text-base-content/70">
-												<Users className="h-4 w-4" />
-												{cancellingLesson.studentNames.join(', ')}
-											</div>
-										)}
-										{cancellingLesson.pairLabel && (
-											<div className="flex items-center gap-2 text-sm text-base-content/70">
-												<Users className="h-4 w-4" />
-												{cancellingLesson.pairLabel}
-											</div>
-										)}
-									</>
-								) : (
-									cancellingLesson.teacherName && (
-										<div className="flex items-center gap-2 text-sm text-base-content/70">
-											<User className="h-4 w-4" />
-											{cancellingLesson.teacherName}
-										</div>
-									)
-								)}
-								{cancellingLesson.roomLabel && (
-									<div className="flex items-center gap-2 text-sm text-base-content/70">
-										<MapPin className="h-4 w-4" />
-										{cancellingLesson.roomLabel}
-									</div>
-								)}
-							</div>
-
-							<div>
-								<label className="label">
-									<span className="label-text font-medium">
-										Reason for cancellation <span className="text-error">*</span>
-									</span>
-								</label>
-								<textarea
-									className="textarea textarea-bordered w-full h-24"
-									placeholder="Please explain why you need to cancel this lesson..."
-									value={cancelReason}
-									onChange={(e) => setCancelReason(e.target.value)}
-								/>
-								<p className="text-xs text-base-content/50 mt-1">
-									{isTrainer ? 'Students will be notified of this cancellation.' : 'Your teacher will be notified of this cancellation.'}
-								</p>
-							</div>
+				<div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+					<div
+						className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+						onClick={() => {
+							setCancelModalOpen(false)
+							setCancellingLesson(null)
+							setCancelReason('')
+						}}
+					/>
+					<div className="relative w-full sm:max-w-md bg-base-100 rounded-t-3xl sm:rounded-2xl shadow-2xl sm:mx-4 max-h-[90vh] overflow-y-auto">
+						{/* Mobile drag indicator */}
+						<div className="flex justify-center pt-2 sm:hidden">
+							<div className="w-12 h-1.5 bg-base-300 rounded-full" />
 						</div>
 
-						<div className="modal-action">
-							<Button
-								className="btn-ghost"
-								onClick={() => {
-									setCancelModalOpen(false)
-									setCancellingLesson(null)
-									setCancelReason('')
-								}}
-							>
-								Keep Lesson
-							</Button>
-							<Button
-								className="btn-error"
-								onClick={handleCancelConfirm}
-								disabled={cancelling || !cancelReason.trim()}
-							>
-								{cancelling ? (
-									<>
-										<span className="loading loading-spinner loading-sm"></span>
-										Cancelling...
-									</>
-								) : (
-									'Cancel Lesson'
-								)}
-							</Button>
+						<div className="p-4 sm:p-6">
+							<div className="flex items-center justify-between mb-4">
+								<h3 className="font-bold text-base sm:text-lg flex items-center gap-2">
+									<AlertCircle className="h-5 w-5 text-warning" />
+									Cancel Lesson
+								</h3>
+								<button
+									className="btn btn-sm btn-circle btn-ghost"
+									onClick={() => {
+										setCancelModalOpen(false)
+										setCancellingLesson(null)
+										setCancelReason('')
+									}}
+								>
+									<X className="h-4 w-4" />
+								</button>
+							</div>
+
+							<div className="space-y-4">
+								<div className="bg-base-200 rounded-xl p-3 sm:p-4 space-y-2">
+									<p className="font-semibold text-base sm:text-lg">{cancellingLesson.timetableName}</p>
+									<div className="flex items-center gap-2 text-xs sm:text-sm text-base-content/70">
+										<Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+										{format(parseISO(cancellingLesson.date), 'EEE, MMM d, yyyy')}
+									</div>
+									<div className="flex items-center gap-2 text-xs sm:text-sm text-base-content/70">
+										<Clock className="h-3.5 w-3.5 flex-shrink-0" />
+										{formatTimeRange(cancellingLesson.start, cancellingLesson.end)}
+									</div>
+									{isTrainer ? (
+										<>
+											{cancellingLesson.studentNames && cancellingLesson.studentNames.length > 0 && (
+												<div className="flex items-center gap-2 text-xs sm:text-sm text-base-content/70">
+													<Users className="h-3.5 w-3.5 flex-shrink-0" />
+													{cancellingLesson.studentNames.join(', ')}
+												</div>
+											)}
+											{cancellingLesson.pairLabel && (
+												<div className="flex items-center gap-2 text-xs sm:text-sm text-base-content/70">
+													<Users className="h-3.5 w-3.5 flex-shrink-0" />
+													{cancellingLesson.pairLabel}
+												</div>
+											)}
+										</>
+									) : (
+										cancellingLesson.teacherName && (
+											<div className="flex items-center gap-2 text-xs sm:text-sm text-base-content/70">
+												<User className="h-3.5 w-3.5 flex-shrink-0" />
+												{cancellingLesson.teacherName}
+											</div>
+										)
+									)}
+									{cancellingLesson.roomLabel && (
+										<div className="flex items-center gap-2 text-xs sm:text-sm text-base-content/70">
+											<MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+											{cancellingLesson.roomLabel}
+										</div>
+									)}
+								</div>
+
+								<div>
+									<label className="label">
+										<span className="label-text text-sm font-medium">
+											Reason for cancellation <span className="text-error">*</span>
+										</span>
+									</label>
+									<textarea
+										className="textarea textarea-bordered w-full h-20 sm:h-24 text-sm"
+										placeholder="Please explain why you need to cancel..."
+										value={cancelReason}
+										onChange={(e) => setCancelReason(e.target.value)}
+									/>
+									<p className="text-[11px] sm:text-xs text-base-content/50 mt-1">
+										{isTrainer ? 'Students will be notified.' : 'Your teacher will be notified.'}
+									</p>
+								</div>
+
+								<div className="flex gap-2 pt-2">
+									<Button
+										className="btn-ghost btn-sm sm:btn-md flex-1"
+										onClick={() => {
+											setCancelModalOpen(false)
+											setCancellingLesson(null)
+											setCancelReason('')
+										}}
+									>
+										Keep Lesson
+									</Button>
+									<Button
+										className="btn-error btn-sm sm:btn-md flex-1"
+										onClick={handleCancelConfirm}
+										disabled={cancelling || !cancelReason.trim()}
+									>
+										{cancelling ? (
+											<>
+												<span className="loading loading-spinner loading-sm"></span>
+												Cancelling...
+											</>
+										) : (
+											'Cancel Lesson'
+										)}
+									</Button>
+								</div>
+							</div>
 						</div>
 					</div>
-					<div className="modal-backdrop bg-black/50" onClick={() => setCancelModalOpen(false)} />
 				</div>
 			)}
 		</div>
@@ -649,7 +675,7 @@ function LessonCard({
 							e.stopPropagation()
 							onCancel()
 						}}
-						className="btn btn-outline btn-error btn-sm w-full text-xs"
+						className="btn btn-outline btn-error btn-xs sm:btn-sm w-full text-[11px] sm:text-xs min-h-[36px]"
 					>
 						<X className="h-3.5 w-3.5 mr-1" />
 						Cancel Lesson

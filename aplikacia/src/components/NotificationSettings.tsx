@@ -116,37 +116,37 @@ export default function NotificationSettings() {
 	}
 
 	return (
-		<div className="card bg-base-100 border border-base-300">
-			<div className="card-body space-y-5">
+		<div className="card bg-base-100 border border-base-300 rounded-2xl">
+			<div className="card-body p-4 sm:p-6 space-y-4 sm:space-y-5">
 				{/* Header */}
 				<div className="flex items-center justify-between">
-					<div className="flex items-center gap-3">
+					<div className="flex items-center gap-2 sm:gap-3">
 						<Bell className="h-5 w-5 text-primary" />
-						<h3 className="text-lg font-semibold">Notification Settings</h3>
+						<h3 className="text-base sm:text-lg font-semibold">Notifications</h3>
 					</div>
 					{saveSuccess && (
-						<span className="badge badge-success badge-sm gap-1">Saved</span>
+						<span className="badge badge-success badge-xs sm:badge-sm gap-1">Saved</span>
 					)}
 				</div>
 
 				{/* Master toggle */}
-				<div className="flex items-center justify-between p-3 rounded-lg bg-base-200">
-					<div className="flex items-center gap-3">
+				<div className="flex items-center justify-between p-3 rounded-xl bg-base-200">
+					<div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
 						{prefs.enabled ? (
-							<BellRing className="h-5 w-5 text-success" />
+							<BellRing className="h-5 w-5 text-success flex-shrink-0" />
 						) : (
-							<BellOff className="h-5 w-5 text-base-content/40" />
+							<BellOff className="h-5 w-5 text-base-content/40 flex-shrink-0" />
 						)}
-						<div>
-							<p className="font-medium text-sm">Lesson Reminders</p>
-							<p className="text-xs text-base-content/50">
+						<div className="min-w-0">
+							<p className="font-medium text-xs sm:text-sm">Lesson Reminders</p>
+							<p className="text-[11px] sm:text-xs text-base-content/50 truncate">
 								Get notified about your upcoming lessons
 							</p>
 						</div>
 					</div>
 					<input
 						type="checkbox"
-						className="toggle toggle-primary"
+						className="toggle toggle-primary toggle-sm sm:toggle-md flex-shrink-0 ml-2"
 						checked={prefs.enabled}
 						onChange={(e) => savePrefs({ enabled: e.target.checked })}
 						disabled={saving}
@@ -156,25 +156,25 @@ export default function NotificationSettings() {
 				{prefs.enabled && (
 					<>
 						{/* Push notifications */}
-						<div className="flex items-center justify-between p-3 rounded-lg bg-base-200">
-							<div className="flex items-center gap-3">
-								<Smartphone className="h-5 w-5 text-info" />
-								<div>
-									<p className="font-medium text-sm">Push Notifications</p>
-									<p className="text-xs text-base-content/50">
+						<div className="flex items-center justify-between p-3 rounded-xl bg-base-200 gap-2">
+							<div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+								<Smartphone className="h-5 w-5 text-info flex-shrink-0" />
+								<div className="min-w-0">
+									<p className="font-medium text-xs sm:text-sm">Push Notifications</p>
+									<p className="text-[11px] sm:text-xs text-base-content/50">
 										{!pushSupported
 											? 'Not supported in this browser'
 											: pushPermission === 'denied'
 												? 'Blocked — enable in browser settings'
 												: pushSubscribed
 													? 'Active — you will receive push alerts'
-													: 'Enable to get alerts even when the app is closed'}
+													: 'Enable for alerts when app is closed'}
 									</p>
 								</div>
 							</div>
 							{pushSupported && pushPermission !== 'denied' && (
 								<button
-									className={`btn btn-sm ${pushSubscribed ? 'btn-outline btn-error' : 'btn-primary'}`}
+									className={`btn btn-xs sm:btn-sm flex-shrink-0 ${pushSubscribed ? 'btn-outline btn-error' : 'btn-primary'}`}
 									onClick={handleTogglePush}
 									disabled={pushLoading}
 								>
@@ -190,56 +190,64 @@ export default function NotificationSettings() {
 						</div>
 
 						{pushError && (
-							<div className="flex items-center gap-2 text-warning text-xs px-1">
+							<div className="flex items-center gap-2 text-warning text-[11px] sm:text-xs px-1">
 								<AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
 								<span>{pushError}</span>
 							</div>
 						)}
 
-						{/* Reminder timing */}
+						{/* Reminder timing - pill-style selectors on mobile */}
 						<div className="space-y-3">
-							<label className="form-control">
-								<div className="flex items-center gap-2 mb-1.5">
+							<div>
+								<div className="flex items-center gap-2 mb-2">
 									<Clock className="h-4 w-4 text-primary" />
-									<span className="label-text font-medium text-sm">First Reminder</span>
+									<span className="text-xs sm:text-sm font-medium">First Reminder</span>
 								</div>
-								<select
-									className="select select-bordered select-sm w-full"
-									value={prefs.reminderHoursBefore}
-									onChange={(e) => savePrefs({ reminderHoursBefore: Number(e.target.value) })}
-									disabled={saving}
-								>
+								<div className="flex flex-wrap gap-1.5">
 									{REMINDER_OPTIONS.map((opt) => (
-										<option key={opt.value} value={opt.value}>
+										<button
+											key={opt.value}
+											type="button"
+											onClick={() => savePrefs({ reminderHoursBefore: opt.value })}
+											disabled={saving}
+											className={`btn btn-xs rounded-full ${
+												prefs.reminderHoursBefore === opt.value
+													? 'btn-primary'
+													: 'btn-outline'
+											}`}
+										>
 											{opt.label}
-										</option>
+										</button>
 									))}
-								</select>
-							</label>
+								</div>
+							</div>
 
-							<label className="form-control">
-								<div className="flex items-center gap-2 mb-1.5">
+							<div>
+								<div className="flex items-center gap-2 mb-2">
 									<Clock className="h-4 w-4 text-secondary" />
-									<span className="label-text font-medium text-sm">Second Reminder</span>
+									<span className="text-xs sm:text-sm font-medium">Second Reminder</span>
 								</div>
-								<select
-									className="select select-bordered select-sm w-full"
-									value={prefs.secondReminderHoursBefore}
-									onChange={(e) => savePrefs({ secondReminderHoursBefore: Number(e.target.value) })}
-									disabled={saving}
-								>
+								<div className="flex flex-wrap gap-1.5">
 									{SECOND_REMINDER_OPTIONS.map((opt) => (
-										<option key={opt.value} value={opt.value}>
+										<button
+											key={opt.value}
+											type="button"
+											onClick={() => savePrefs({ secondReminderHoursBefore: opt.value })}
+											disabled={saving}
+											className={`btn btn-xs rounded-full ${
+												prefs.secondReminderHoursBefore === opt.value
+													? 'btn-secondary'
+													: 'btn-outline'
+											}`}
+										>
 											{opt.label}
-										</option>
+										</button>
 									))}
-								</select>
-								<div className="label">
-									<span className="label-text-alt text-base-content/40">
-										Optional — get a second nudge closer to the lesson
-									</span>
 								</div>
-							</label>
+								<p className="text-[11px] sm:text-xs text-base-content/40 mt-1.5">
+									Optional — get a second nudge closer to the lesson
+								</p>
+							</div>
 						</div>
 					</>
 				)}

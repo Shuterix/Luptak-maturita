@@ -158,6 +158,94 @@ export function SchedulerConfigModal({
 		
 		return result.length > 0 ? result.join(', ') : 'Available anytime'
 	}
+	// Helper: convert time string to minutes
+	const timeToMin = (t: string) => {
+		const [h, m] = t.split(':').map(Number)
+		return h * 60 + m
+	}
+	const minToTime = (min: number) => {
+		const h = Math.floor(min / 60)
+		const m = min % 60
+		return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+	}
+
+	// Helper: get unavailability windows for a day from any format
+	const getUnavailWindows = (unavailability: any, day: string): Array<{ start: string; end: string }> => {
+		if (!unavailability) return []
+		if (unavailability[day] && Array.isArray(unavailability[day])) return unavailability[day]
+		if (unavailability.days) {
+			if (unavailability.days.get && typeof unavailability.days.get === 'function') return unavailability.days.get(day) || []
+			if (unavailability.days[day] && Array.isArray(unavailability.days[day])) return unavailability.days[day]
+		}
+		return []
+	}
+
+	/** Compute available time slots within the timetable range for each day */
+	const convertToAvailabilityInRange = (unavailability: any, rangeStart: string, rangeEnd: string): { text: string; status: 'full' | 'partial' | 'none' } => {
+		if (!rangeStart || !rangeEnd) {
+			const str = convertUnavailabilityToString(unavailability)
+			return { text: str, status: str === 'Available anytime' ? 'full' : 'partial' }
+		}
+
+		const rStart = timeToMin(rangeStart)
+		const rEnd = timeToMin(rangeEnd)
+		if (rStart >= rEnd) return { text: `Available ${rangeStart}-${rangeEnd}`, status: 'full' }
+
+		const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
+		let fullyAvailableDays = 0
+		let blockedDays = 0
+		const restrictedEntries: string[] = []
+
+		for (const day of days) {
+			const windows = getUnavailWindows(unavailability, day)
+
+			// Get unavailability windows that overlap with our timetable range
+			const unavailSlots = windows
+				.filter(w => w.start && w.end)
+				.map(w => ({ start: timeToMin(w.start), end: timeToMin(w.end) }))
+				.filter(w => w.end > rStart && w.start < rEnd)
+				.sort((a, b) => a.start - b.start)
+
+			if (unavailSlots.length === 0) {
+				fullyAvailableDays++
+				continue
+			}
+
+			// Compute available gaps within range
+			let cursor = rStart
+			const available: { start: number; end: number }[] = []
+			for (const u of unavailSlots) {
+				const uStart = Math.max(u.start, rStart)
+				const uEnd = Math.min(u.end, rEnd)
+				if (cursor < uStart) {
+					available.push({ start: cursor, end: uStart })
+				}
+				cursor = Math.max(cursor, uEnd)
+			}
+			if (cursor < rEnd) {
+				available.push({ start: cursor, end: rEnd })
+			}
+
+			if (available.length === 0) {
+				blockedDays++
+				restrictedEntries.push(`${day.slice(0, 3)}: ✗`)
+			} else {
+				const slots = available.map(s => `${minToTime(s.start)}-${minToTime(s.end)}`).join(', ')
+				restrictedEntries.push(`${day.slice(0, 3)}: ${slots}`)
+			}
+		}
+
+		if (fullyAvailableDays === 7) {
+			return { text: `Fully available ${rangeStart}-${rangeEnd}`, status: 'full' }
+		}
+		if (blockedDays === 7) {
+			return { text: 'Not available in timetable hours', status: 'none' }
+		}
+
+		const status = blockedDays > 0 ? 'partial' : 'partial'
+		return { text: restrictedEntries.join(' · '), status }
+	}
+
 	const [currentStep, setCurrentStep] = useState<Step>('teachers')
 	const [localBreaks, setLocalBreaks] = useState(breaks)
 	const [localLessonDuration, setLocalLessonDuration] = useState(lessonDuration)
@@ -355,39 +443,52 @@ export function SchedulerConfigModal({
 	}
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-base-content/60 p-4">
-			<div className="w-full max-w-4xl rounded-2xl bg-base-200 shadow-2xl border border-base-300 max-h-[90vh] overflow-y-auto">
-				<div className="flex items-center justify-between border-b border-base-300 px-6 py-4 sticky top-0 bg-base-200 z-10">
-					<h3 className="text-lg font-semibold text-base-content">Automatic Scheduler Configuration</h3>
-					<button type="button" className="btn btn-ghost btn-sm" onClick={handleClose}>
+		<div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+			<div className="w-full sm:max-w-4xl rounded-t-3xl sm:rounded-2xl bg-base-200 shadow-2xl border border-base-300 max-h-[95vh] sm:max-h-[90vh] sm:mx-4 overflow-y-auto">
+				{/* Mobile drag indicator */}
+				<div className="flex justify-center pt-2 sm:hidden">
+					<div className="w-12 h-1.5 bg-base-300 rounded-full" />
+				</div>
+				<div className="flex items-center justify-between border-b border-base-300 px-4 sm:px-6 py-3 sm:py-4 sticky top-0 bg-base-200 z-10">
+					<h3 className="text-base sm:text-lg font-semibold text-base-content">Scheduler Configuration</h3>
+					<button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={handleClose}>
 						✕
 					</button>
 				</div>
 
-				<div className="p-6 space-y-6">
-					{/* Step Progress */}
-					<div className="mb-6 space-y-4">
-						<div className="flex flex-wrap items-center justify-between gap-2 text-sm text-base-content/70">
-							<span>
-								Step {currentStepIndex + 1} of {stepsConfig.length}
-							</span>
-						</div>
-						<ul className="steps steps-horizontal w-full overflow-x-auto">
+				<div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+					{/* Step Progress - mobile-friendly pills */}
+					<div className="mb-4 sm:mb-6">
+						<div className="flex gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none pb-1" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
 							{stepsConfig.map((step, idx) => (
-								<li
+								<button
 									key={step.id}
-									className={`step ${idx <= currentStepIndex ? 'step-primary' : ''}`}
-									data-content={idx + 1}
+									type="button"
+									onClick={() => {
+										// Allow clicking on previous/current steps
+										if (idx <= currentStepIndex) {
+											setCurrentStep(step.id)
+										}
+									}}
+									className={`flex-shrink-0 flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-full transition-all text-xs sm:text-sm font-medium
+										${idx === currentStepIndex
+											? 'bg-primary text-primary-content shadow-md'
+											: idx < currentStepIndex
+												? 'bg-primary/20 text-primary cursor-pointer hover:bg-primary/30'
+												: 'bg-base-300/50 text-base-content/40'
+										}
+									`}
 								>
-									<div className="mt-2 flex flex-col items-center gap-1 text-center">
-										<span className="text-xs font-semibold uppercase tracking-wide text-base-content/70">
-											{step.title}
-										</span>
-										<span className="text-[11px] text-base-content/40">{step.description}</span>
-									</div>
-								</li>
+									<span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold
+										${idx === currentStepIndex ? 'bg-primary-content/20' : idx < currentStepIndex ? 'bg-primary/20' : 'bg-base-content/10'}
+									">
+										{idx < currentStepIndex ? '✓' : idx + 1}
+									</span>
+									<span className="hidden sm:inline">{step.title}</span>
+									<span className="sm:hidden">{step.title.split(' ')[0]}</span>
+								</button>
 							))}
-						</ul>
+						</div>
 					</div>
 
 					{error && (
@@ -401,8 +502,8 @@ export function SchedulerConfigModal({
 						{currentStep === 'teachers' && (
 							<div className="space-y-4">
 								<div className="space-y-1">
-									<h3 className="text-lg font-semibold text-base-content">Teachers</h3>
-									<p className="text-sm text-base-content/60">
+									<h3 className="text-base sm:text-lg font-semibold text-base-content">Teachers</h3>
+									<p className="text-xs sm:text-sm text-base-content/60">
 										Teachers from your club. Their unavailability is set in their profile.
 									</p>
 								</div>
@@ -410,13 +511,13 @@ export function SchedulerConfigModal({
 								{dbTeachers.length > 0 ? (
 									<>
 								<div className="flex items-center justify-between">
-											<span className="text-sm text-base-content/60">{dbTeachers.length} teacher(s) in club</span>
+											<span className="text-xs sm:text-sm text-base-content/60">{dbTeachers.length} teacher(s) in club</span>
 								</div>
-								<div className="space-y-2 max-h-[400px] overflow-y-auto">
+								<div className="space-y-2 max-h-[50vh] overflow-y-auto">
 											{dbTeachers.map((teacher) => {
 												const teacherName = `${teacher.firstName} ${teacher.lastName}`
 												const isExpanded = expandedTeachers.has(teacher._id)
-												const unavailabilityStr = convertUnavailabilityToString(teacher.unavailability)
+												const availInRange = convertToAvailabilityInRange(teacher.unavailability, localDayStart, localDayEnd)
 												const config = teacherConfigs[teacher._id] || {
 													teacherId: teacher._id,
 													maxLessonsPerDay: 4,
@@ -436,52 +537,80 @@ export function SchedulerConfigModal({
 															}
 															setExpandedTeachers(newExpanded)
 														}}
-															className="w-full flex items-center justify-between p-4 hover:bg-base-200 transition"
+															className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-base-200 transition active:bg-base-200 min-h-[48px]"
 													>
-														<div className="flex items-center gap-3">
-															<span className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
-																<span className="font-medium">{teacherName}</span>
-																{unavailabilityStr === 'Available anytime' && (
-																	<span className="badge badge-sm badge-success">Available anytime</span>
-															)}
+														<div className="flex items-center gap-2 sm:gap-3 min-w-0">
+															<span className={`transition-transform text-sm ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+																<span className="font-medium text-sm sm:text-base truncate">{teacherName}</span>
 														</div>
-														<div className="flex items-center gap-2">
-																{unavailabilityStr !== 'Available anytime' && (
-																	<span className="text-xs text-warning">Has unavailability</span>
+														<div className="flex items-center gap-2 flex-shrink-0 ml-2">
+																{availInRange.status === 'full' ? (
+																	<span className="badge badge-sm badge-success whitespace-nowrap">Available</span>
+																) : availInRange.status === 'none' ? (
+																	<span className="badge badge-sm badge-error whitespace-nowrap">Blocked</span>
+																) : (
+																	<span className="badge badge-sm badge-warning whitespace-nowrap">Partial</span>
 															)}
 														</div>
 													</button>
 												{isExpanded && (
-													<div className="p-4 pt-0 space-y-3 border-t border-base-300">
+													<div className="p-3 sm:p-4 pt-0 space-y-3 border-t border-base-300">
 																<div className="text-sm">
-																	<p className="font-medium text-base-content/70 mb-1">Unavailability (from profile):</p>
-																	<p className={`text-sm ${unavailabilityStr === 'Available anytime' ? 'text-success' : 'text-warning'}`}>
-																		{unavailabilityStr}
+																	<p className="font-medium text-base-content/70 mb-1">
+																		Available in timetable hours ({localDayStart}–{localDayEnd}):
 																	</p>
-																	<p className="text-xs text-base-content/50 mt-1">
-																		To change unavailability, the teacher must update their profile.
+																	{availInRange.status === 'full' ? (
+																		<span className="text-success text-xs sm:text-sm">✓ Fully available</span>
+																	) : availInRange.status === 'none' ? (
+																		<span className="text-error text-xs sm:text-sm">✗ Not available</span>
+																	) : (
+																		<div className="text-[11px] sm:text-xs text-warning font-mono bg-base-200 rounded px-2 py-1 break-all">
+																			{availInRange.text}
+																		</div>
+																	)}
+																	<p className="text-[11px] sm:text-xs text-base-content/50 mt-1">
+																		Teacher must update their own profile to change this.
 																	</p>
 																</div>
-														<div className="grid grid-cols-2 gap-3">
+														<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 															<label className="form-control">
-																<span className="label-text">Max lessons per day</span>
-																<Input
-																	type="number"
-																	min={1}
-																			value={config.maxLessonsPerDay}
-																			onChange={(event) => {
-																				setTeacherConfigs(prev => ({
-																					...prev,
-																					[teacher._id]: {
-																						...config,
-																						maxLessonsPerDay: Number(event.target.value) || 4,
-																					}
-																				}))
-																			}}
-																/>
+																<span className="label-text text-xs sm:text-sm">Max lessons/day</span>
+																<div className="flex items-center gap-1">
+																	<button
+																		type="button"
+																		className="btn btn-sm btn-circle btn-ghost"
+																		onClick={() => {
+																			const val = Math.max(1, config.maxLessonsPerDay - 1)
+																			setTeacherConfigs(prev => ({ ...prev, [teacher._id]: { ...config, maxLessonsPerDay: val } }))
+																		}}
+																	>−</button>
+																	<Input
+																		type="number"
+																		min={1}
+																				value={config.maxLessonsPerDay}
+																				onChange={(event) => {
+																					setTeacherConfigs(prev => ({
+																						...prev,
+																						[teacher._id]: {
+																							...config,
+																							maxLessonsPerDay: Number(event.target.value) || 4,
+																						}
+																					}))
+																				}}
+																		className="text-center"
+																	/>
+																	<button
+																		type="button"
+																		className="btn btn-sm btn-circle btn-ghost"
+																		onClick={() => {
+																			const val = config.maxLessonsPerDay + 1
+																			setTeacherConfigs(prev => ({ ...prev, [teacher._id]: { ...config, maxLessonsPerDay: val } }))
+																		}}
+																	>+</button>
+																</div>
 															</label>
 															<label className="form-control">
-																<span className="label-text">Room</span>
+																<span className="label-text text-xs sm:text-sm">Room</span>
 																<Input
 																			value={config.room}
 																			onChange={(event) => {
@@ -515,43 +644,43 @@ export function SchedulerConfigModal({
 						{currentStep === 'couples' && (
 							<div className="space-y-4">
 								<div className="space-y-1">
-									<h3 className="text-lg font-semibold text-base-content">Couples</h3>
-									<p className="text-sm text-base-content/60">
-										Couples from database with calculated unavailability (union of both partners' unavailability).
+									<h3 className="text-base sm:text-lg font-semibold text-base-content">Couples</h3>
+									<p className="text-xs sm:text-sm text-base-content/60">
+										Couples with calculated unavailability (union of both partners).
 									</p>
 								</div>
 								
 								{dbCouples.length > 0 ? (
 									<>
 										<div className="flex items-center justify-between">
-											<span className="text-sm text-base-content/60">{dbCouples.length} couple(s) from database</span>
+											<span className="text-xs sm:text-sm text-base-content/60">{dbCouples.length} couple(s)</span>
 											<button
 												type="button"
 												onClick={() => {
-													// Close modal and reload page to trigger fresh fetch of couples
 													onClose()
 													setTimeout(() => window.location.reload(), 100)
 												}}
-												className="btn btn-xs btn-ghost gap-1 text-primary"
+												className="btn btn-xs btn-ghost gap-1 text-primary min-h-[36px]"
 												title="Refresh couple unavailability from student data"
 											>
 												<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
 												Refresh
 											</button>
 										</div>
-										<div className="space-y-2 max-h-[400px] overflow-y-auto">
+										<div className="space-y-2 max-h-[50vh] overflow-y-auto">
 											{dbCouples.map((pair) => {
 												const studentA = pair.studentAId
 												const studentB = pair.studentBId
-												const coupleName = `${studentA.firstName} ${studentA.lastName} & ${studentB.firstName} ${studentB.lastName}`
-												// Check both pair unavailability AND individual student unavailability
+												const coupleNameShort = `${studentA.firstName} & ${studentB.firstName}`
+												const coupleNameFull = `${studentA.firstName} ${studentA.lastName} & ${studentB.firstName} ${studentB.lastName}`
+												const studentAAvail = convertToAvailabilityInRange(studentA?.unavailability, localDayStart, localDayEnd)
+												const studentBAvail = convertToAvailabilityInRange(studentB?.unavailability, localDayStart, localDayEnd)
+												const pairAvail = convertToAvailabilityInRange(pair.unavailability, localDayStart, localDayEnd)
 												const studentAUnavailStr = convertUnavailabilityToString(studentA?.unavailability)
 												const studentBUnavailStr = convertUnavailabilityToString(studentB?.unavailability)
-												const pairUnavailStr = convertUnavailabilityToString(pair.unavailability)
-												// If pair doesn't have calculated unavailability but students do, show warning
 												const hasStudentUnavailability = studentAUnavailStr !== 'Available anytime' || studentBUnavailStr !== 'Available anytime'
-												const unavailabilityStr = pairUnavailStr !== 'Available anytime' ? pairUnavailStr : 
-													hasStudentUnavailability ? '⚠ Needs refresh' : 'Available anytime'
+												const pairUnavailStr = convertUnavailabilityToString(pair.unavailability)
+												const needsRefresh = pairUnavailStr === 'Available anytime' && hasStudentUnavailability
 												const config = coupleConfigs[pair._id] || {
 													coupleId: pair._id,
 													desiredLessons: 2,
@@ -573,140 +702,138 @@ export function SchedulerConfigModal({
 																}
 																setExpandedCouples(newExpanded)
 															}}
-															className="w-full flex items-center justify-between p-4 hover:bg-base-300/50 transition"
+															className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-base-300/50 active:bg-base-300/50 transition min-h-[56px]"
 														>
-															<div className="flex items-center gap-3">
-																<span className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
-																<div className="text-left">
-																	<div className="font-medium text-base-content">{coupleName}</div>
-																	<div className="text-xs text-base-content/60">
-																		Desired: {config.desiredLessons} lessons · Priority: {config.priority}
+															<div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+																<span className={`transition-transform text-sm flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+																<div className="text-left min-w-0">
+																	<div className="font-medium text-sm sm:text-base text-base-content truncate sm:hidden">{coupleNameShort}</div>
+																	<div className="font-medium text-sm sm:text-base text-base-content truncate hidden sm:block">{coupleNameFull}</div>
+																	<div className="text-[11px] sm:text-xs text-base-content/60">
+																		{config.desiredLessons} lessons · P{config.priority}
 																	</div>
 																</div>
-																{pair.baseGroup && (
-																	<span className="badge badge-outline badge-sm">{pair.baseGroup}</span>
-																)}
 															</div>
-															<div className="flex items-center gap-2">
-																{unavailabilityStr === 'Available anytime' && (
-																	<span className="badge badge-sm badge-ghost">Available anytime</span>
+															<div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+																{pair.baseGroup && (
+																	<span className="badge badge-outline badge-xs">{pair.baseGroup}</span>
 																)}
-																{unavailabilityStr === '⚠ Needs refresh' && (
-																	<span className="badge badge-sm badge-warning">⚠ Needs refresh</span>
-																)}
-																{unavailabilityStr !== 'Available anytime' && unavailabilityStr !== '⚠ Needs refresh' && (
-																	<span className="text-xs text-base-content/60">Unavailable: {unavailabilityStr}</span>
+																{needsRefresh ? (
+																	<span className="badge badge-xs sm:badge-sm badge-warning whitespace-nowrap">Refresh</span>
+																) : pairAvail.status === 'full' ? (
+																	<span className="badge badge-xs sm:badge-sm badge-success whitespace-nowrap">Available</span>
+																) : pairAvail.status === 'none' ? (
+																	<span className="badge badge-xs sm:badge-sm badge-error whitespace-nowrap">Blocked</span>
+																) : (
+																	<span className="badge badge-xs sm:badge-sm badge-warning whitespace-nowrap">Partial</span>
 																)}
 															</div>
 														</button>
 														{isExpanded && (
-															<div className="p-4 pt-0 space-y-3 border-t border-base-300">
-																<div className="space-y-3 text-sm">
-																	{/* Partner A */}
-																	<div className="bg-base-300/30 rounded-lg p-3">
-																		<div className="flex items-center justify-between mb-2">
-																			<span className="font-medium text-base-content">{studentA.firstName} {studentA.lastName}</span>
-																			<span className="badge badge-sm badge-ghost">Partner A</span>
-																		</div>
-																		{(() => {
-																			const aStr = studentAUnavailStr
-																			return aStr !== 'Available anytime' ? (
-																				<div className="space-y-1">
-																					<span className="text-error/70 text-xs font-medium">Cannot train:</span>
-																					<div className="text-xs text-base-content/70 font-mono bg-base-200 rounded px-2 py-1">
-																						{aStr}
-																					</div>
+															<div className="p-3 sm:p-4 pt-0 space-y-3 border-t border-base-300">
+																<div className="space-y-2 text-sm">
+																	{/* Partners - compact on mobile */}
+																	<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+																		<div className="bg-base-300/30 rounded-lg p-2 sm:p-3">
+																			<div className="flex items-center justify-between mb-1">
+																				<span className="font-medium text-xs sm:text-sm text-base-content">{studentA.firstName} {studentA.lastName}</span>
+																			</div>
+																			{studentAAvail.status === 'full' ? (
+																				<span className="text-success/70 text-[11px] sm:text-xs">✓ Fully available</span>
+																			) : studentAAvail.status === 'none' ? (
+																				<span className="text-error/70 text-[11px] sm:text-xs">✗ Not available in timetable hours</span>
+																			) : (
+																				<div className="text-[11px] sm:text-xs text-warning/70 font-mono bg-base-200 rounded px-2 py-1 break-all">
+																					{studentAAvail.text}
 																				</div>
-																		) : (
-																				<span className="text-success/70 text-xs">✓ Available anytime</span>
-																			)
-																		})()}
+																			)}
+																		</div>
+																		<div className="bg-base-300/30 rounded-lg p-2 sm:p-3">
+																			<div className="flex items-center justify-between mb-1">
+																				<span className="font-medium text-xs sm:text-sm text-base-content">{studentB.firstName} {studentB.lastName}</span>
+																			</div>
+																			{studentBAvail.status === 'full' ? (
+																				<span className="text-success/70 text-[11px] sm:text-xs">✓ Fully available</span>
+																			) : studentBAvail.status === 'none' ? (
+																				<span className="text-error/70 text-[11px] sm:text-xs">✗ Not available in timetable hours</span>
+																			) : (
+																				<div className="text-[11px] sm:text-xs text-warning/70 font-mono bg-base-200 rounded px-2 py-1 break-all">
+																					{studentBAvail.text}
+																				</div>
+																			)}
+																		</div>
 																	</div>
 																	
-																	{/* Partner B */}
-																	<div className="bg-base-300/30 rounded-lg p-3">
-																		<div className="flex items-center justify-between mb-2">
-																			<span className="font-medium text-base-content">{studentB.firstName} {studentB.lastName}</span>
-																			<span className="badge badge-sm badge-ghost">Partner B</span>
-																		</div>
-																		{(() => {
-																			const bStr = studentBUnavailStr
-																			return bStr !== 'Available anytime' ? (
-																				<div className="space-y-1">
-																					<span className="text-error/70 text-xs font-medium">Cannot train:</span>
-																					<div className="text-xs text-base-content/70 font-mono bg-base-200 rounded px-2 py-1">
-																						{bStr}
-																					</div>
-																				</div>
+																	{/* Combined availability in timetable range */}
+																	<div className="pt-2 border-t border-base-300">
+																		<span className="text-base-content/60 text-xs font-medium">
+																			Combined ({localDayStart}–{localDayEnd}):
+																		</span>
+																		{needsRefresh ? (
+																			<span className="text-warning/80 text-xs ml-1">⚠ Needs refresh</span>
+																		) : pairAvail.status === 'full' ? (
+																			<span className="text-success/70 text-xs ml-1">✓ Fully available</span>
+																		) : pairAvail.status === 'none' ? (
+																			<span className="text-error/70 text-xs ml-1">✗ Not available</span>
 																		) : (
-																				<span className="text-success/70 text-xs">✓ Available anytime</span>
-																			)
-																		})()}
-																	</div>
-																	
-																	{/* Calculated Couple Unavailability */}
-																		<div className="pt-2 border-t border-base-300">
-																		<span className="text-base-content/60 font-medium">Combined Couple Unavailability: </span>
-																		{pairUnavailStr !== 'Available anytime' ? (
-																			<div className="mt-1 text-xs text-error/80 font-mono bg-error/10 rounded px-2 py-1 border border-error/20">
-																				{pairUnavailStr}
-																		</div>
-																		) : hasStudentUnavailability ? (
-																			<div className="mt-1 text-xs text-warning/80 font-mono bg-warning/10 rounded px-2 py-1 border border-warning/20">
-																				⚠ Not calculated yet - click Refresh
-																		</div>
-																		) : (
-																			<span className="text-success/70 text-sm">✓ Available anytime</span>
-																	)}
+																			<div className="mt-1 text-[11px] sm:text-xs text-warning/80 font-mono bg-warning/10 rounded px-2 py-1 border border-warning/20 break-all">
+																				{pairAvail.text}
+																			</div>
+																		)}
 																	</div>
 																</div>
 																
-																{/* Configuration inputs */}
+																{/* Configuration inputs - with +/- steppers */}
 																<div className="pt-3 border-t border-base-300 space-y-3">
 																	<div className="grid grid-cols-2 gap-3">
 																		<label className="form-control">
 																			<span className="label-text text-xs">Desired Lessons</span>
-																			<Input
-																				type="number"
-																				min="0"
-																				value={config.desiredLessons}
-																				onChange={(e) => {
-																					const newDesiredLessons = Number(e.target.value) || 0
-																					let newTeacherLessons = { ...config.teacherLessons }
-																					
-																					// If desiredLessons is set to 0, clear all teacherLessons
-																					if (newDesiredLessons === 0) {
-																						newTeacherLessons = {}
-																					} else {
-																						// If desiredLessons is less than sum of teacherLessons, adjust teacherLessons
-																						const currentSum = Object.values(newTeacherLessons).reduce((sum, count) => sum + count, 0)
-																						if (newDesiredLessons < currentSum) {
-																							// Reduce teacherLessons proportionally or clear if needed
-																							if (newDesiredLessons === 0) {
-																								newTeacherLessons = {}
-																							}
-																						}
-																					}
-																					
-																					const newConfig = { ...config, desiredLessons: newDesiredLessons, teacherLessons: newTeacherLessons }
-																					setCoupleConfigs((prev) => ({ ...prev, [pair._id]: newConfig }))
-																				}}
-																				className="input-sm"
-																			/>
+																			<div className="flex items-center gap-1">
+																				<button type="button" className="btn btn-xs btn-circle btn-ghost" onClick={() => {
+																					const val = Math.max(0, config.desiredLessons - 1)
+																					const newTeacherLessons = val === 0 ? {} : { ...config.teacherLessons }
+																					setCoupleConfigs(prev => ({ ...prev, [pair._id]: { ...config, desiredLessons: val, teacherLessons: newTeacherLessons } }))
+																				}}>−</button>
+																				<Input
+																					type="number"
+																					min="0"
+																					value={config.desiredLessons}
+																					onChange={(e) => {
+																						const newDesiredLessons = Number(e.target.value) || 0
+																						let newTeacherLessons = { ...config.teacherLessons }
+																						if (newDesiredLessons === 0) newTeacherLessons = {}
+																						setCoupleConfigs((prev) => ({ ...prev, [pair._id]: { ...config, desiredLessons: newDesiredLessons, teacherLessons: newTeacherLessons } }))
+																					}}
+																					className="input-sm text-center"
+																				/>
+																				<button type="button" className="btn btn-xs btn-circle btn-ghost" onClick={() => {
+																					setCoupleConfigs(prev => ({ ...prev, [pair._id]: { ...config, desiredLessons: config.desiredLessons + 1 } }))
+																				}}>+</button>
+																			</div>
 																		</label>
 																		<label className="form-control">
 																			<span className="label-text text-xs">Priority (1-10)</span>
-																			<Input
-																				type="number"
-																				min="1"
-																				max="10"
-																				value={config.priority}
-																				onChange={(e) => {
-																					const newConfig = { ...config, priority: Math.min(10, Math.max(1, Number(e.target.value) || 5)) }
-																					setCoupleConfigs((prev) => ({ ...prev, [pair._id]: newConfig }))
-																				}}
-																				className="input-sm"
-																			/>
+																			<div className="flex items-center gap-1">
+																				<button type="button" className="btn btn-xs btn-circle btn-ghost" onClick={() => {
+																					const val = Math.max(1, config.priority - 1)
+																					setCoupleConfigs(prev => ({ ...prev, [pair._id]: { ...config, priority: val } }))
+																				}}>−</button>
+																				<Input
+																					type="number"
+																					min="1"
+																					max="10"
+																					value={config.priority}
+																					onChange={(e) => {
+																						const newConfig = { ...config, priority: Math.min(10, Math.max(1, Number(e.target.value) || 5)) }
+																						setCoupleConfigs((prev) => ({ ...prev, [pair._id]: newConfig }))
+																					}}
+																					className="input-sm text-center"
+																				/>
+																				<button type="button" className="btn btn-xs btn-circle btn-ghost" onClick={() => {
+																					const val = Math.min(10, config.priority + 1)
+																					setCoupleConfigs(prev => ({ ...prev, [pair._id]: { ...config, priority: val } }))
+																				}}>+</button>
+																			</div>
 																		</label>
 																	</div>
 																	
@@ -716,8 +843,8 @@ export function SchedulerConfigModal({
 																			const teacherName = `${teacher.firstName} ${teacher.lastName}`
 																			const currentCount = config.teacherLessons[teacherName] || 0
 																			return (
-																				<div key={teacher._id} className="flex items-center gap-2">
-																					<label className="flex items-center gap-2 flex-1">
+																				<div key={teacher._id} className="flex items-center gap-2 min-h-[40px]">
+																					<label className="flex items-center gap-2 flex-1 cursor-pointer min-h-[40px]">
 																						<input
 																							type="checkbox"
 																							className="checkbox checkbox-sm checkbox-primary"
@@ -729,11 +856,8 @@ export function SchedulerConfigModal({
 																								} else {
 																									delete newTeacherLessons[teacherName]
 																								}
-																								
-																								// Calculate sum of teacherLessons and update desiredLessons
 																								const teacherLessonsSum = Object.values(newTeacherLessons).reduce((sum, count) => sum + count, 0)
 																								const newDesiredLessons = teacherLessonsSum > 0 ? Math.max(config.desiredLessons, teacherLessonsSum) : config.desiredLessons
-																								
 																								const newConfig = { ...config, teacherLessons: newTeacherLessons, desiredLessons: newDesiredLessons }
 																								setCoupleConfigs((prev) => ({ ...prev, [pair._id]: newConfig }))
 																							}}
@@ -741,24 +865,21 @@ export function SchedulerConfigModal({
 																						<span className="text-xs text-base-content/80 flex-1">{teacherName}</span>
 																					</label>
 																					{currentCount > 0 && (
-																						<Input
-																							type="number"
-																							min="1"
-																							max="10"
-																							value={currentCount}
-																							onChange={(e) => {
-																								const count = Math.max(1, Math.min(10, Number(e.target.value) || 1))
+																						<div className="flex items-center gap-0.5">
+																							<button type="button" className="btn btn-xs btn-circle btn-ghost" onClick={() => {
+																								const count = Math.max(1, currentCount - 1)
 																								const newTeacherLessons = { ...config.teacherLessons, [teacherName]: count }
-																								
-																								// Calculate sum of teacherLessons and update desiredLessons
-																								const teacherLessonsSum = Object.values(newTeacherLessons).reduce((sum, count) => sum + count, 0)
-																								const newDesiredLessons = Math.max(config.desiredLessons, teacherLessonsSum)
-																								
-																								const newConfig = { ...config, teacherLessons: newTeacherLessons, desiredLessons: newDesiredLessons }
-																								setCoupleConfigs((prev) => ({ ...prev, [pair._id]: newConfig }))
-																							}}
-																							className="input-sm w-16"
-																						/>
+																								const teacherLessonsSum = Object.values(newTeacherLessons).reduce((sum, c) => sum + c, 0)
+																								setCoupleConfigs(prev => ({ ...prev, [pair._id]: { ...config, teacherLessons: newTeacherLessons, desiredLessons: Math.max(config.desiredLessons, teacherLessonsSum) } }))
+																							}}>−</button>
+																							<span className="w-6 text-center text-sm font-medium">{currentCount}</span>
+																							<button type="button" className="btn btn-xs btn-circle btn-ghost" onClick={() => {
+																								const count = Math.min(10, currentCount + 1)
+																								const newTeacherLessons = { ...config.teacherLessons, [teacherName]: count }
+																								const teacherLessonsSum = Object.values(newTeacherLessons).reduce((sum, c) => sum + c, 0)
+																								setCoupleConfigs(prev => ({ ...prev, [pair._id]: { ...config, teacherLessons: newTeacherLessons, desiredLessons: Math.max(config.desiredLessons, teacherLessonsSum) } }))
+																							}}>+</button>
+																						</div>
 																					)}
 																				</div>
 																			)
@@ -774,18 +895,17 @@ export function SchedulerConfigModal({
 												)
 											})}
 										</div>
-										<div className="alert alert-info">
-											<p className="text-sm text-base-content/80">
-												Unavailability is automatically calculated as the union of both partners' individual unavailability. 
-												If no unavailability is set for a student, they are considered available anytime. 
-												To modify unavailability, update each student's unavailability in their profile.
+										<div className="alert alert-info text-xs sm:text-sm">
+											<p className="text-base-content/80">
+												Unavailability is the union of both partners' schedules. 
+												To change, update each student's profile.
 											</p>
 										</div>
 									</>
 								) : (
 									<div className="alert alert-warning">
-										<p className="text-sm text-base-content/80">
-											No couples found in database. Please create couples in the Couples management page first.
+										<p className="text-xs sm:text-sm text-base-content/80">
+											No couples found. Create couples in Couples management first.
 										</p>
 									</div>
 								)}
@@ -795,139 +915,163 @@ export function SchedulerConfigModal({
 						{currentStep === 'breaks' && (
 							<div className="space-y-4">
 								<div className="space-y-1">
-									<h3 className="text-lg font-semibold text-base-content">Breaks & Settings</h3>
-									<p className="text-sm text-base-content/60">Configure breaks, daily hours, and lesson settings.</p>
+									<h3 className="text-base sm:text-lg font-semibold text-base-content">Breaks & Settings</h3>
+									<p className="text-xs sm:text-sm text-base-content/60">Configure daily hours, lesson settings, and breaks.</p>
 								</div>
-								<div className="grid grid-cols-2 gap-4">
-									<label className="form-control">
-										<span className="label-text">Day Start</span>
-										<Input
-											type="time"
-											value={localDayStart}
-											onChange={(event) => setLocalDayStart(event.target.value)}
-										/>
-									</label>
-									<label className="form-control">
-										<span className="label-text">Day End</span>
-										<Input
-											type="time"
-											value={localDayEnd}
-											onChange={(event) => setLocalDayEnd(event.target.value)}
-										/>
-									</label>
+
+								{/* Daily hours */}
+								<div className="bg-base-100 rounded-xl p-3 sm:p-4 border border-base-300 space-y-3">
+									<h4 className="text-sm font-medium text-base-content">Daily Hours</h4>
+									<div className="grid grid-cols-2 gap-3">
+										<label className="form-control">
+											<span className="label-text text-xs sm:text-sm">Day Start</span>
+											<Input
+												type="time"
+												value={localDayStart}
+												onChange={(event) => setLocalDayStart(event.target.value)}
+											/>
+										</label>
+										<label className="form-control">
+											<span className="label-text text-xs sm:text-sm">Day End</span>
+											<Input
+												type="time"
+												value={localDayEnd}
+												onChange={(event) => setLocalDayEnd(event.target.value)}
+											/>
+										</label>
+									</div>
 								</div>
-								<label className="form-control">
-									<label className="label cursor-pointer">
-										<span className="label-text">Include weekends (Saturday & Sunday)</span>
+
+								{/* Toggle switches */}
+								<div className="bg-base-100 rounded-xl border border-base-300 divide-y divide-base-300">
+									<label className="flex items-center justify-between p-3 sm:p-4 cursor-pointer min-h-[48px]">
+										<span className="label-text text-xs sm:text-sm pr-4">Include weekends</span>
 										<input
 											type="checkbox"
-											className="checkbox checkbox-primary"
+											className="toggle toggle-primary toggle-sm sm:toggle-md"
 											checked={localIncludeWeekends}
 											onChange={(e) => setLocalIncludeWeekends(e.target.checked)}
 										/>
 									</label>
-								</label>
-								<label className="form-control">
-									<label className="label cursor-pointer">
-										<div className="flex flex-col">
-											<span className="label-text">Distribute lessons evenly across days</span>
-											<span className="text-xs text-base-content/50">When enabled, lessons will be spread throughout the timetable period instead of being scheduled on the first available days</span>
+									<label className="flex items-center justify-between p-3 sm:p-4 cursor-pointer min-h-[48px]">
+										<div className="flex flex-col pr-4">
+											<span className="label-text text-xs sm:text-sm">Distribute lessons evenly</span>
+											<span className="text-[11px] sm:text-xs text-base-content/50">Spread across all days instead of filling first</span>
 										</div>
 										<input
 											type="checkbox"
-											className="checkbox checkbox-primary"
+											className="toggle toggle-primary toggle-sm sm:toggle-md flex-shrink-0"
 											checked={localDistributeLessons}
 											onChange={(e) => setLocalDistributeLessons(e.target.checked)}
 										/>
 									</label>
-								</label>
-								<label className="form-control">
-									<span className="label-text">Default breaks (comma separated)</span>
-									<textarea
-										className="textarea textarea-bordered"
-										rows={2}
-										value={localBreaks}
-										onChange={(event) => setLocalBreaks(event.target.value)}
-										placeholder="12:00-12:30,15:00-15:15"
-									></textarea>
-								</label>
-								<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+								</div>
+
+								{/* Lesson settings */}
+								<div className="bg-base-100 rounded-xl p-3 sm:p-4 border border-base-300 space-y-3">
+									<h4 className="text-sm font-medium text-base-content">Lesson Settings</h4>
+									<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+										<label className="form-control">
+											<span className="label-text text-xs sm:text-sm">Duration (min)</span>
+											<div className="flex items-center gap-1">
+												<button type="button" className="btn btn-sm btn-circle btn-ghost" onClick={() => setLocalLessonDuration(prev => Math.max(5, prev - 5))}>−</button>
+												<Input
+													type="number"
+													min={5}
+													step={5}
+													value={localLessonDuration}
+													onChange={(event) => setLocalLessonDuration(Number(event.target.value))}
+													className="text-center"
+												/>
+												<button type="button" className="btn btn-sm btn-circle btn-ghost" onClick={() => setLocalLessonDuration(prev => prev + 5)}>+</button>
+											</div>
+										</label>
+										<label className="form-control">
+											<span className="label-text text-xs sm:text-sm">Student break after</span>
+											<div className="flex items-center gap-1">
+												<button type="button" className="btn btn-sm btn-circle btn-ghost" onClick={() => setLocalStudentBreakAfter(prev => Math.max(1, prev - 1))}>−</button>
+												<Input
+													type="number"
+													min={1}
+													value={localStudentBreakAfter}
+													onChange={(event) => setLocalStudentBreakAfter(Number(event.target.value))}
+													className="text-center"
+												/>
+												<button type="button" className="btn btn-sm btn-circle btn-ghost" onClick={() => setLocalStudentBreakAfter(prev => prev + 1)}>+</button>
+											</div>
+											<span className="text-[10px] text-base-content/40 mt-0.5">lessons</span>
+										</label>
+										<label className="form-control">
+											<span className="label-text text-xs sm:text-sm">Teacher break after</span>
+											<div className="flex items-center gap-1">
+												<button type="button" className="btn btn-sm btn-circle btn-ghost" onClick={() => setLocalTeacherBreakAfter(prev => Math.max(1, prev - 1))}>−</button>
+												<Input
+													type="number"
+													min={1}
+													value={localTeacherBreakAfter}
+													onChange={(event) => setLocalTeacherBreakAfter(Number(event.target.value))}
+													className="text-center"
+												/>
+												<button type="button" className="btn btn-sm btn-circle btn-ghost" onClick={() => setLocalTeacherBreakAfter(prev => prev + 1)}>+</button>
+											</div>
+											<span className="text-[10px] text-base-content/40 mt-0.5">lessons</span>
+										</label>
+									</div>
+								</div>
+
+								{/* Breaks */}
+								<div className="bg-base-100 rounded-xl p-3 sm:p-4 border border-base-300 space-y-2">
+									<h4 className="text-sm font-medium text-base-content">Break Times</h4>
 									<label className="form-control">
-										<span className="label-text">Lesson duration (minutes)</span>
-										<Input
-											type="number"
-											min={5}
-											step={5}
-											value={localLessonDuration}
-											onChange={(event) => setLocalLessonDuration(Number(event.target.value))}
-										/>
-									</label>
-									<label className="form-control">
-										<span className="label-text">Student break after # lessons</span>
-										<Input
-											type="number"
-											min={1}
-											value={localStudentBreakAfter}
-											onChange={(event) => setLocalStudentBreakAfter(Number(event.target.value))}
-										/>
-									</label>
-									<label className="form-control">
-										<span className="label-text">Teacher break after # lessons</span>
-										<Input
-											type="number"
-											min={1}
-											value={localTeacherBreakAfter}
-											onChange={(event) => setLocalTeacherBreakAfter(Number(event.target.value))}
-										/>
+										<span className="label-text text-[11px] sm:text-xs text-base-content/60">Comma separated time ranges</span>
+										<textarea
+											className="textarea textarea-bordered text-sm"
+											rows={2}
+											value={localBreaks}
+											onChange={(event) => setLocalBreaks(event.target.value)}
+											placeholder="12:00-12:30, 15:00-15:15"
+										></textarea>
 									</label>
 								</div>
 							</div>
 						)}
 
 						{currentStep === 'review' && (
-							<div className="space-y-4">
+							<div className="space-y-3 sm:space-y-4">
 								<div className="space-y-1">
-									<h3 className="text-lg font-semibold text-base-content">Review Configuration</h3>
-									<p className="text-sm text-base-content/60">Please review all settings before generating.</p>
+									<h3 className="text-base sm:text-lg font-semibold text-base-content">Review</h3>
+									<p className="text-xs sm:text-sm text-base-content/60">Review settings before generating.</p>
 								</div>
-								<div className="space-y-4">
-									<div className="rounded-xl border border-base-300 bg-base-100 p-4">
-										<h4 className="font-semibold mb-2">Teachers ({dbTeachers.length})</h4>
-										<div className="space-y-2 text-sm">
+								<div className="space-y-3">
+									<div className="rounded-xl border border-base-300 bg-base-100 p-3 sm:p-4">
+										<h4 className="font-semibold text-sm mb-2">Teachers ({dbTeachers.length})</h4>
+										<div className="space-y-2 text-xs sm:text-sm">
 											{dbTeachers.map((teacher) => {
 												const teacherName = `${teacher.firstName} ${teacher.lastName}`
-												const unavailStr = convertUnavailabilityToString(teacher.unavailability)
+												const teacherAvail = convertToAvailabilityInRange(teacher.unavailability, localDayStart, localDayEnd)
 												const config = teacherConfigs[teacher._id] || { maxLessonsPerDay: 4, room: '' }
 												return (
-													<div key={teacher._id} className="flex justify-between items-start">
-														<div>
+													<div key={teacher._id} className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-0.5">
+														<div className="min-w-0">
 															<span className="font-medium">{teacherName}</span>
-															<span className="text-base-content/50 ml-2">
-																(Max: {config.maxLessonsPerDay}/day, Room: {config.room || 'Not set'})
+															<span className="text-base-content/50 ml-1 sm:ml-2 text-xs">
+																Max: {config.maxLessonsPerDay}/day · {config.room || 'No room'}
 															</span>
-												</div>
-														<span className={`text-xs ${unavailStr === 'Available anytime' ? 'text-success' : 'text-warning'}`}>
-															{unavailStr === 'Available anytime' ? '✓ Available anytime' : unavailStr}
+														</div>
+														<span className={`text-xs flex-shrink-0 ${teacherAvail.status === 'full' ? 'text-success' : teacherAvail.status === 'none' ? 'text-error' : 'text-warning'}`}>
+															{teacherAvail.status === 'full' ? '✓ Available' : teacherAvail.status === 'none' ? '✗ Blocked' : '⚠ Partial'}
 														</span>
 													</div>
 												)
 											})}
 										</div>
 									</div>
-									<div className="rounded-xl border border-base-300 bg-base-100 p-4">
-										<h4 className="font-semibold mb-2">Couples ({dbCouples.length})</h4>
-										<div className="space-y-3 text-sm">
+									<div className="rounded-xl border border-base-300 bg-base-100 p-3 sm:p-4">
+										<h4 className="font-semibold text-sm mb-2">Couples ({dbCouples.length})</h4>
+										<div className="space-y-2 text-xs sm:text-sm">
 											{dbCouples.map((pair) => {
 												const studentA = pair.studentAId
 												const studentB = pair.studentBId
-												const coupleName = `${studentA.firstName} ${studentA.lastName} & ${studentB.firstName} ${studentB.lastName}`
-												// Check both pair unavailability AND individual student unavailability
-												const studentAUnavailStrSummary = convertUnavailabilityToString(studentA?.unavailability)
-												const studentBUnavailStrSummary = convertUnavailabilityToString(studentB?.unavailability)
-												const pairUnavailStrSummary = convertUnavailabilityToString(pair.unavailability)
-												const hasStudentUnavailabilitySummary = studentAUnavailStrSummary !== 'Available anytime' || studentBUnavailStrSummary !== 'Available anytime'
-												const unavailabilityStrSummary = pairUnavailStrSummary !== 'Available anytime' ? pairUnavailStrSummary : 
-													hasStudentUnavailabilitySummary ? '⚠ Needs refresh' : 'Available anytime'
 												const config = coupleConfigs[pair._id] || {
 													coupleId: pair._id,
 													desiredLessons: 2,
@@ -935,67 +1079,41 @@ export function SchedulerConfigModal({
 													teacherLessons: {},
 												}
 												const teacherLessonsStr = Object.entries(config.teacherLessons)
-													.map(([name, count]) => `${name}:${count}`)
+													.map(([name, count]) => `${name.split(' ')[0]}:${count}`)
 													.join(', ') || 'None'
 												
 												return (
 													<div key={pair._id} className="border-b border-base-300 pb-2 last:border-b-0">
-														<div className="flex justify-between items-start">
-															<div className="flex-1">
-																<p className="font-medium text-base-content">{coupleName}</p>
-																<p className="text-xs text-base-content/60 mt-1">
-																	Unavailability: {unavailabilityStrSummary}
-																</p>
-																<p className="text-xs text-base-content/60">
-																	Desired: {config.desiredLessons} lessons · Priority: {config.priority} · Teachers: {teacherLessonsStr}
-																</p>
-															</div>
-															{(pair.baseGroups && pair.baseGroups.length > 0) ? (
-																<div className="flex flex-wrap gap-1 ml-2">
-																	{pair.baseGroups.map(g => (
-																		<span key={g} className="badge badge-outline badge-xs">{g}</span>
-																	))}
-																</div>
-															) : pair.baseGroup ? (
-																<span className="badge badge-outline badge-xs ml-2">{pair.baseGroup}</span>
-															) : null}
-														</div>
+														<p className="font-medium text-base-content text-xs sm:text-sm">{studentA.firstName} & {studentB.firstName}</p>
+														<p className="text-[11px] sm:text-xs text-base-content/60">
+															{config.desiredLessons} lessons · P{config.priority} · {teacherLessonsStr}
+														</p>
 													</div>
 												)
 											})}
 										</div>
 									</div>
-									<div className="rounded-xl border border-base-300 bg-base-100 p-4">
-										<h4 className="font-semibold mb-2">Settings</h4>
-										<div className="space-y-2 text-sm">
-											<div className="flex justify-between">
-												<span>Daily Hours:</span>
-												<span className="text-base-content/60">{localDayStart} - {localDayEnd}</span>
-											</div>
-											<div className="flex justify-between">
-												<span>Breaks:</span>
-												<span className="text-base-content/60">{localBreaks || 'None'}</span>
-											</div>
-											<div className="flex justify-between">
-												<span>Lesson Duration:</span>
-												<span className="text-base-content/60">{localLessonDuration} minutes</span>
-											</div>
-											<div className="flex justify-between">
-												<span>Student Break After:</span>
-												<span className="text-base-content/60">{localStudentBreakAfter} lessons</span>
-											</div>
-											<div className="flex justify-between">
-												<span>Teacher Break After:</span>
-												<span className="text-base-content/60">{localTeacherBreakAfter} lessons</span>
-											</div>
-											<div className="flex justify-between">
-												<span>Include Weekends:</span>
-												<span className="text-base-content/60">{localIncludeWeekends ? 'Yes' : 'No'}</span>
-											</div>
-											<div className="flex justify-between">
-												<span>Distribute Lessons Evenly:</span>
-												<span className="text-base-content/60">{localDistributeLessons ? 'Yes' : 'No'}</span>
-											</div>
+									<div className="rounded-xl border border-base-300 bg-base-100 p-3 sm:p-4">
+										<h4 className="font-semibold text-sm mb-2">Settings</h4>
+										<div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:text-sm">
+											<span className="text-base-content/60">Hours</span>
+											<span className="text-right font-medium">{localDayStart} – {localDayEnd}</span>
+											<span className="text-base-content/60">Lesson</span>
+											<span className="text-right font-medium">{localLessonDuration} min</span>
+											<span className="text-base-content/60">Weekends</span>
+											<span className="text-right font-medium">{localIncludeWeekends ? 'Yes' : 'No'}</span>
+											<span className="text-base-content/60">Distribute</span>
+											<span className="text-right font-medium">{localDistributeLessons ? 'Yes' : 'No'}</span>
+											<span className="text-base-content/60">Student break</span>
+											<span className="text-right font-medium">After {localStudentBreakAfter}</span>
+											<span className="text-base-content/60">Teacher break</span>
+											<span className="text-right font-medium">After {localTeacherBreakAfter}</span>
+											{localBreaks && (
+												<>
+													<span className="text-base-content/60">Breaks</span>
+													<span className="text-right font-medium text-xs break-all">{localBreaks}</span>
+												</>
+											)}
 										</div>
 									</div>
 								</div>
@@ -1003,27 +1121,25 @@ export function SchedulerConfigModal({
 						)}
 					</div>
 
-					{/* Navigation */}
-					<div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-base-300">
+					{/* Navigation - sticky on mobile */}
+					<div className="flex items-center justify-between gap-3 pt-3 sm:pt-4 border-t border-base-300 sticky bottom-0 bg-base-200 pb-2 -mx-4 sm:-mx-6 px-4 sm:px-6">
 						<Button
 							type="button"
-							className="btn-secondary"
+							className="btn-ghost btn-sm sm:btn-md"
 							onClick={handlePrev}
 							disabled={!canGoPrev}
 						>
-							Back
+							← Back
 						</Button>
-						<div className="flex items-center gap-2">
-							{currentStep === 'review' ? (
-								<Button type="button" className="btn-primary" onClick={handleSave}>
-									Save & Generate
-								</Button>
-							) : (
-								<Button type="button" className="btn-primary" onClick={handleNext}>
-									Next
-								</Button>
-							)}
-						</div>
+						{currentStep === 'review' ? (
+							<Button type="button" className="btn-primary btn-sm sm:btn-md" onClick={handleSave}>
+								Save & Generate
+							</Button>
+						) : (
+							<Button type="button" className="btn-primary btn-sm sm:btn-md" onClick={handleNext}>
+								Next →
+							</Button>
+						)}
 					</div>
 				</div>
 			</div>

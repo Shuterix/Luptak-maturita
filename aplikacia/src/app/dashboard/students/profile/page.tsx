@@ -7,6 +7,7 @@ import { showAlertToast } from '@/components/toast/Toast'
 import ResponsiveModal from '@/components/ResponsiveModal'
 import NotificationSettings from '@/components/NotificationSettings'
 import { Clock, User, Users, Calendar, Save, ChevronDown, ChevronUp, Edit2 } from 'lucide-react'
+import AvailabilityEditor from '@/components/AvailabilityEditor'
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
 
@@ -266,11 +267,11 @@ export default function StudentSettingsPage() {
 	}
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-4 sm:space-y-6">
 			{/* Header */}
 			<div className="flex items-center justify-between">
-				<h1 className="text-3xl font-bold flex items-center gap-2">
-					<User className="h-8 w-8 text-primary" />
+				<h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+					<User className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
 					Profile
 				</h1>
 			</div>
@@ -287,28 +288,60 @@ export default function StudentSettingsPage() {
 				</Alert>
 			)}
 
-			{/* Weekly Unavailability Section - Button to open modal */}
+			{/* Weekly Unavailability Section */}
 			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
-				<div className="card-body">
-					<div className="flex items-center justify-between">
+				<div className="card-body p-4 sm:p-6">
+					<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-2">
 						<div>
-							<h2 className="card-title flex items-center gap-2 mb-2">
+							<h2 className="card-title text-base sm:text-lg flex items-center gap-2 mb-0.5 sm:mb-1">
 								<Clock className="h-5 w-5" />
 								Weekly Unavailability
 							</h2>
-							<p className="text-sm text-base-content/70">
-								Set the times when you <strong>CANNOT</strong> train (e.g., school hours, work).
+							<p className="text-xs sm:text-sm text-base-content/70">
+								Set the times when you <strong>CANNOT</strong> train (e.g., school, work).
 							</p>
 						</div>
 						<Button
 							type="button"
-							className="btn-primary"
+							className="btn-primary btn-sm sm:btn-md"
 							onClick={() => setIsAvailabilityModalOpen(true)}
 						>
 							<Clock className="h-4 w-4" />
-							Edit Availability
+							Edit Schedule
 						</Button>
 					</div>
+
+					{/* Quick summary preview */}
+					{(() => {
+						const daysWithData = (Object.keys(DAY_LABELS) as DayOfWeek[]).filter(
+							day => unavailability[day] && unavailability[day]!.length > 0
+						)
+						if (daysWithData.length === 0) {
+							return (
+								<div className="bg-success/5 border border-success/20 rounded-xl p-3 text-center mt-2">
+									<p className="text-success text-sm font-medium">Available all week</p>
+								</div>
+							)
+						}
+						return (
+							<div className="grid grid-cols-7 gap-1 mt-3">
+								{(Object.keys(DAY_LABELS) as DayOfWeek[]).map((day) => {
+									const windows = unavailability[day] || []
+									return (
+										<div
+											key={day}
+											className={`text-center py-1.5 rounded-lg text-[10px] sm:text-xs
+												${windows.length > 0 ? 'bg-error/10 text-error/80' : 'bg-success/10 text-success/80'}
+											`}
+										>
+											<div className="font-medium">{DAY_LABELS[day].slice(0, 3)}</div>
+											<div className="mt-0.5">{windows.length > 0 ? `${windows.length}` : '✓'}</div>
+										</div>
+									)
+								})}
+							</div>
+						)
+					})()}
 				</div>
 			</div>
 
@@ -320,111 +353,34 @@ export default function StudentSettingsPage() {
 					setSelectedDay(null)
 				}}
 				title="Weekly Unavailability"
-				size="xl"
+				size="lg"
 			>
 				<div className="space-y-4">
-					<p className="text-sm text-base-content/70 mb-4">
-						Set the times when you <strong>CANNOT</strong> train (e.g., school hours, work). 
-						Leave empty if you're available anytime. Teachers will schedule your lessons outside these times.
+					<p className="text-sm text-base-content/70">
+						Set the times when you <strong>CANNOT</strong> train. 
+						Leave empty if you're available anytime. Use presets for quick setup.
 					</p>
 
-					{/* Day Selector Dropdown */}
-					<div>
-						<label className="label">
-							<span className="label-text font-medium flex items-center gap-2">
-								<Calendar className="h-4 w-4" />
-								Select Day to Edit
-							</span>
-						</label>
-						<select
-							value={selectedDay || ''}
-							onChange={(e) => setSelectedDay(e.target.value as DayOfWeek)}
-							className="select select-bordered w-full"
-						>
-							<option value="">Choose a day...</option>
-							{(Object.keys(DAY_LABELS) as DayOfWeek[]).map((day) => (
-								<option key={day} value={day}>
-									{DAY_LABELS[day]}
-									{unavailability[day] && unavailability[day]!.length > 0 && (
-										` (${unavailability[day]!.length} time${unavailability[day]!.length !== 1 ? 's' : ''})`
-									)}
-								</option>
-							))}
-						</select>
-					</div>
+					<AvailabilityEditor
+						unavailability={unavailability}
+						onChange={setUnavailability}
+						activityLabel="train"
+					/>
 
-					{/* Selected Day's Time Windows */}
-					{selectedDay && (
-						<div className="border border-base-300 rounded-lg p-4 bg-base-200">
-							<div className="flex items-center justify-between mb-4">
-								<h3 className="font-semibold text-lg text-base-content">
-									{DAY_LABELS[selectedDay]}
-								</h3>
-								<Button
-									type="button"
-									className="btn-sm btn-primary"
-									onClick={() => addTimeWindow(selectedDay)}
-								>
-									+ Add Time Window
-								</Button>
-							</div>
-
-							{(!unavailability[selectedDay] || unavailability[selectedDay]!.length === 0) && (
-								<p className="text-sm text-success/70 italic mb-4">
-									✓ Available all day
-								</p>
-							)}
-
-							<div className="space-y-3">
-								{unavailability[selectedDay]?.map((window, index) => (
-									<div key={index} className="flex items-center gap-3 flex-wrap bg-error/5 p-3 rounded-lg border border-error/20">
-										<span className="text-error/70 text-sm font-medium">Cannot train:</span>
-										<Input
-											type="time"
-											label="From"
-											value={window.start}
-											onChange={(e) => updateTimeWindow(selectedDay, index, 'start', e.target.value)}
-											className="flex-1 min-w-[120px]"
-										/>
-										<span className="text-base-content/60">to</span>
-										<Input
-											type="time"
-											label="Until"
-											value={window.end}
-											onChange={(e) => updateTimeWindow(selectedDay, index, 'end', e.target.value)}
-											className="flex-1 min-w-[120px]"
-										/>
-										<Button
-											type="button"
-											className="btn-sm btn-ghost text-error"
-											onClick={() => removeTimeWindow(selectedDay, index)}
-										>
-											Remove
-										</Button>
-									</div>
-								))}
-							</div>
-						</div>
-					)}
-
-					{!selectedDay && (
-						<div className="alert alert-info">
-							<Calendar className="h-5 w-5" />
-							<span>Please select a day from the dropdown above to edit its availability.</span>
-						</div>
-					)}
-
-					<div className="mt-6 flex justify-end gap-3">
+					<div className="flex justify-end gap-3 pt-2 border-t border-base-300 sticky bottom-0 bg-base-100 py-3 -mx-4 sm:-mx-6 px-4 sm:px-6">
 						<Button
 							type="button"
-							className="btn-ghost"
-							onClick={() => setIsAvailabilityModalOpen(false)}
+							className="btn-ghost btn-sm sm:btn-md"
+							onClick={() => {
+								setIsAvailabilityModalOpen(false)
+								setSelectedDay(null)
+							}}
 						>
 							Cancel
 						</Button>
 						<Button
 							type="button"
-							className="btn-primary"
+							className="btn-primary btn-sm sm:btn-md"
 							onClick={async () => {
 								await handleSaveUnavailability()
 								setIsAvailabilityModalOpen(false)
@@ -440,7 +396,7 @@ export default function StudentSettingsPage() {
 							) : (
 								<>
 									<Save className="h-4 w-4" />
-									Save Unavailability
+									Save
 								</>
 							)}
 						</Button>
@@ -498,43 +454,43 @@ export default function StudentSettingsPage() {
 
 			{/* Profile Information Section */}
 			<div className="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
-				<div className="card-body">
-					<h2 className="card-title flex items-center gap-2 mb-4">
+				<div className="card-body p-4 sm:p-6">
+					<h2 className="card-title text-base sm:text-lg flex items-center gap-2 mb-2 sm:mb-4">
 						<User className="h-5 w-5" />
 						Profile Information
 					</h2>
-					<p className="text-sm text-base-content/70 mb-6">
+					<p className="text-xs sm:text-sm text-base-content/70 mb-4 sm:mb-6">
 						Update your personal information. Teachers may use this to contact you.
 					</p>
 
-					<div className="space-y-4">
+					<div className="space-y-3 sm:space-y-4">
 						<div>
-							<label className="label">
-								<span className="label-text font-medium">Email</span>
+							<label className="label py-1">
+								<span className="label-text text-xs sm:text-sm font-medium">Email</span>
 							</label>
 							<Input type="email" value={user.email || ''} disabled className="bg-base-200" />
-							<p className="text-xs text-base-content/50 mt-1">Email cannot be changed</p>
+							<p className="text-[11px] sm:text-xs text-base-content/50 mt-1">Email cannot be changed</p>
 						</div>
 
 						<div>
-							<div className="flex items-center justify-between mb-2">
-								<label className="label">
-									<span className="label-text font-medium">Name</span>
+							<div className="flex items-center justify-between mb-1.5 sm:mb-2">
+								<label className="label py-1">
+									<span className="label-text text-xs sm:text-sm font-medium">Name</span>
 								</label>
 								{!editingName && (
 									<Button
 										type="button"
-										className="btn-sm btn-ghost"
+										className="btn-xs sm:btn-sm btn-ghost"
 										onClick={() => setEditingName(true)}
 									>
-										<Edit2 className="h-4 w-4" />
+										<Edit2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
 										Edit
 									</Button>
 								)}
 							</div>
 							{editingName ? (
 								<div className="space-y-3">
-									<div className="grid grid-cols-2 gap-3">
+									<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
 										<Input
 											type="text"
 											value={firstName}
@@ -576,7 +532,7 @@ export default function StudentSettingsPage() {
 									</div>
 								</div>
 							) : (
-								<div className="grid grid-cols-2 gap-3">
+								<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
 									<Input
 										type="text"
 										value={user.firstName || ''}
@@ -596,8 +552,8 @@ export default function StudentSettingsPage() {
 						</div>
 
 						<div>
-							<label className="label">
-								<span className="label-text font-medium">Phone Number</span>
+							<label className="label py-1">
+								<span className="label-text text-xs sm:text-sm font-medium">Phone Number</span>
 							</label>
 							<div className="flex gap-2">
 								<Input
@@ -609,7 +565,7 @@ export default function StudentSettingsPage() {
 								/>
 								<Button
 									type="button"
-									className="btn-primary"
+									className="btn-sm sm:btn-md btn-primary"
 									onClick={() => handleSaveProfile(false, true)}
 									disabled={savingProfile || phoneNumber === (user.profile?.phone || '')}
 								>
