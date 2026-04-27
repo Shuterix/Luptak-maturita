@@ -145,6 +145,64 @@ function parseDate(s: unknown): string | null {
 	return null
 }
 
+type DbTimetableTarget = {
+	id: string
+	student_id: string | null
+	couple_id: string | null
+	desired_lessons_count: number
+	priority: string
+	preferred_trainer_id: string | null
+}
+
+type BodyCoupleTarget = {
+	student_id?: string
+	couple_id?: string
+	desired_lessons_count?: number
+	priority?: string
+	preferred_trainer_id?: string | null
+}
+
+/**
+ * Merge unsaved target rows from the client (same shape as PATCH) into DB
+ * rows by student_id / couple_id so "Generate" respects trainer picks before Save.
+ */
+function applyBodyTargetsToDbRows(
+	dbTargets: DbTimetableTarget[],
+	bodyTargets: BodyCoupleTarget[],
+	trainerIds: string[]
+): DbTimetableTarget[] {
+	if (!bodyTargets.length || !dbTargets.length) return dbTargets
+	const trainerSet = new Set(trainerIds)
+	return dbTargets.map((t) => {
+		const b = bodyTargets.find(
+			(x) =>
+				(t.student_id &&
+					typeof x.student_id === "string" &&
+					x.student_id.trim() !== "" &&
+					x.student_id.trim() === t.student_id) ||
+				(t.couple_id &&
+					typeof x.couple_id === "string" &&
+					x.couple_id.trim() !== "" &&
+					x.couple_id.trim() === t.couple_id)
+		)
+		if (!b) return t
+		const priority =
+			b.priority === "high" || b.priority === "medium" || b.priority === "low" ? b.priority : t.priority
+		const desired =
+			typeof b.desired_lessons_count === "number" ? Math.max(0, b.desired_lessons_count) : t.desired_lessons_count
+		let preferred_trainer_id = t.preferred_trainer_id
+		if ("preferred_trainer_id" in b) {
+			if (b.preferred_trainer_id === null || b.preferred_trainer_id === "") {
+				preferred_trainer_id = null
+			} else if (typeof b.preferred_trainer_id === "string") {
+				const tid = b.preferred_trainer_id.trim()
+				preferred_trainer_id = tid && trainerSet.has(tid) ? tid : null
+			}
+		}
+		return { ...t, desired_lessons_count: desired, priority, preferred_trainer_id }
+	})
+}
+
 export async function POST(
 	request: Request,
 	{ params }: { params: Promise<{ id: string }> }
@@ -172,7 +230,12 @@ export async function POST(
 
 	const DISTRIBUTION_VALUES = ["first_half", "second_half", "same"] as const
 	type BodyGroupTarget = { group_id: string; group_lesson_type_id: string; desired_lessons_count: number; priority?: string; preferred_trainer_id?: string | null }
-	let body: { week_start?: string; distribution?: string; group_targets?: BodyGroupTarget[] } = {}
+	let body: {
+		week_start?: string
+		distribution?: string
+		group_targets?: BodyGroupTarget[]
+		targets?: BodyCoupleTarget[]
+	} = {}
 	try {
 		body = await request.json()
 	} catch {
@@ -258,8 +321,16 @@ export async function POST(
 	const trainerLimits = new Map((limits ?? []).map((l) => [l.user_id, l.max_lessons_per_day]))
 	const roomIds = (rooms ?? []).map((r) => r.id)
 
-	const studentIds = (targets ?? []).map((t) => t.student_id).filter(Boolean) as string[]
-	const coupleIds = (targets ?? []).map((t) => t.couple_id).filter(Boolean) as string[]
+	// Same idea as group_targets: optional body.targets carries current dialog values
+	// (counts, priority, assigned trainer) even when the user has not clicked Save yet.
+	const dbTargets = (targets ?? []) as DbTimetableTarget[]
+	const effectiveTargets =
+		Array.isArray(body.targets) && body.targets.length > 0 && dbTargets.length > 0
+			? applyBodyTargetsToDbRows(dbTargets, body.targets, trainerIds)
+			: dbTargets
+
+	const studentIds = effectiveTargets.map((t) => t.student_id).filter(Boolean) as string[]
+	const coupleIds = effectiveTargets.map((t) => t.couple_id).filter(Boolean) as string[]
 	const allUserIds = [...new Set([...studentIds, ...trainerIds])]
 
 	const { data: profiles } =
@@ -294,7 +365,7 @@ export async function POST(
 	// lesson and Alice as a group member cannot be placed at the same time.
 	const memberContext = await loadMemberContext(supabase, clubId)
 
-	const solverTargets: SolverTarget[] = (targets ?? []).map((t) => ({
+	const solverTargets: SolverTarget[] = effectiveTargets.map((t) => ({
 		id: t.id,
 		student_id: t.student_id ?? null,
 		couple_id: t.couple_id ?? null,
@@ -503,7 +574,7 @@ export async function POST(
 	}
 
 	const shortfalls: Shortfall[] = []
-	for (const t of targets ?? []) {
+	for (const t of effectiveTargets) {
 		const actual = lessons.filter(
 			(l) => l.student_id === t.student_id && l.couple_id === t.couple_id
 		).length

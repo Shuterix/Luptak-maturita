@@ -445,6 +445,42 @@ describe("solveTimetable", () => {
 		expect(lessons.every((l) => l.trainer_id === "trainer-A")).toBe(true)
 	})
 
+	it("balances lessons across trainers when preferred_trainer_id is null (Any)", () => {
+		const input = defaultInput({
+			targets: [
+				{
+					id: "t1",
+					student_id: "s1",
+					couple_id: null,
+					desired_lessons_count: 6,
+					priority: "medium",
+					preferred_trainer_id: null,
+				},
+			],
+			trainer_ids: ["trainer-A", "trainer-B", "trainer-C"],
+			trainer_availability: new Map([
+				["trainer-A", []],
+				["trainer-B", []],
+				["trainer-C", []],
+			]),
+			trainer_limits: new Map([
+				["trainer-A", 10],
+				["trainer-B", 10],
+				["trainer-C", 10],
+			]),
+			target_availability: new Map([["s1", []]]),
+			room_ids: ["r1"],
+		})
+		const lessons = solveTimetable(input)
+		expect(lessons).toHaveLength(6)
+		const counts = new Map<string, number>()
+		for (const l of lessons) {
+			if (l.student_id === "s1") counts.set(l.trainer_id, (counts.get(l.trainer_id) ?? 0) + 1)
+		}
+		const sorted = [...counts.values()].sort((a, b) => a - b)
+		expect(sorted[sorted.length - 1]! - sorted[0]!).toBeLessThanOrEqual(1)
+	})
+
 	it("does not assign a different trainer when preferred_trainer cannot cover all lessons", () => {
 		// trainer-A only has one 45-minute window on Monday; need 2 lessons → at most one with A.
 		// trainer-B is fully free — must NOT receive the second lesson for this target.

@@ -2,7 +2,8 @@
  * Greedy timetable solver: assigns individual/couple lessons to time slots
  * for one week based on targets, preferences, trainer limits, and availability.
  * When a target sets `preferred_trainer_id`, only that trainer may teach those lessons
- * (no silent fallback to another trainer).
+ * (no silent fallback to another trainer). When preference is unset ("Any"), trainers are
+ * chosen to balance lesson counts for that same participant / group target across trainers.
  */
 
 import type { AvailabilitySlot } from "./availability"
@@ -662,11 +663,37 @@ export function solveTimetable(input: SolverInput): LessonRow[] {
 		return false
 	}
 
+	type TrainerBalanceScope =
+		| { kind: "participant"; student_id: string | null; couple_id: string | null }
+		| { kind: "group"; group_id: string; group_lesson_type_id: string }
+
+	function countLessonsForTrainerInScope(trainerId: string, scope: TrainerBalanceScope): number {
+		let n = 0
+		for (const l of lessons) {
+			if (l.trainer_id !== trainerId) continue
+			if (scope.kind === "group") {
+				if (
+					l.lesson_type === "group" &&
+					l.group_id === scope.group_id &&
+					(l.group_lesson_type_id ?? null) === scope.group_lesson_type_id
+				) {
+					n++
+				}
+			} else {
+				if (l.lesson_type === "group" || l.group_id) continue
+				if (scope.student_id != null && l.student_id === scope.student_id) n++
+				else if (scope.couple_id != null && l.couple_id === scope.couple_id) n++
+			}
+		}
+		return n
+	}
+
 	function pickTrainerAndRoom(
 		date: string,
 		start: string,
 		end: string,
-		preferredTrainerId: string | null
+		preferredTrainerId: string | null,
+		balanceScope: TrainerBalanceScope | null
 	): { trainerId: string; roomId: string | null } | null {
 		// When a target names a preferred trainer, that assignment is binding: do not
 		// substitute another trainer (would silently violate the timetable targets).
@@ -678,7 +705,21 @@ export function solveTimetable(input: SolverInput): LessonRow[] {
 				? trainer_ids.includes(preferredTrainerId)
 					? [preferredTrainerId]
 					: []
-				: trainer_ids
+				: [...trainer_ids]
+
+		const trainerOrderIndex = new Map(trainer_ids.map((id, i) => [id, i]))
+		if (
+			(preferredTrainerId == null || preferredTrainerId === "") &&
+			balanceScope != null &&
+			candidates.length > 1
+		) {
+			candidates.sort((a, b) => {
+				const ca = countLessonsForTrainerInScope(a, balanceScope)
+				const cb = countLessonsForTrainerInScope(b, balanceScope)
+				if (ca !== cb) return ca - cb
+				return (trainerOrderIndex.get(a) ?? 0) - (trainerOrderIndex.get(b) ?? 0)
+			})
+		}
 
 		for (const tid of candidates) {
 			if (!trainerAvailable(tid, date, start, end)) continue
@@ -741,7 +782,8 @@ export function solveTimetable(input: SolverInput): LessonRow[] {
 							slot.date,
 							slot.startTime,
 							slot.endTime,
-							gt.preferred_trainer_id
+							gt.preferred_trainer_id,
+							{ kind: "group", group_id: gt.group_id, group_lesson_type_id: gt.group_lesson_type_id }
 						)
 						if (!assigned) continue
 						const startAt = `${slot.date}T${slot.startTime}:00`
@@ -829,7 +871,8 @@ export function solveTimetable(input: SolverInput): LessonRow[] {
 				slot.date,
 				slot.startTime,
 				slot.endTime,
-				t.preferred_trainer_id
+				t.preferred_trainer_id,
+				{ kind: "participant", student_id: t.student_id, couple_id: t.couple_id }
 			)
 			if (!assigned) continue
 
@@ -876,7 +919,8 @@ export function solveTimetable(input: SolverInput): LessonRow[] {
 					slot.date,
 					slot.startTime,
 					slot.endTime,
-					target.preferred_trainer_id
+					target.preferred_trainer_id,
+					{ kind: "participant", student_id: target.student_id, couple_id: target.couple_id }
 				)
 				if (!assigned) continue
 

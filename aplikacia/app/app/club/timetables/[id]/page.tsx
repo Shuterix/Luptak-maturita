@@ -80,6 +80,18 @@ function formatTimeRange(startAt: string, endAt: string): string {
 	return `${start}–${end}`
 }
 
+/**
+ * Prefer edit row when present. `preferred_trainer_id: null` means "Any" and must not be
+ * replaced with the server value (using `??` would treat null as missing and break the UI).
+ */
+function preferredTrainerFromEdits(
+	edit: { preferred_trainer_id: string | null } | undefined,
+	serverValue: string | null
+): string | null {
+	if (edit === undefined) return serverValue
+	return edit.preferred_trainer_id
+}
+
 /** Next Monday from today (YYYY-MM-DD). */
 function nextMonday(): string {
 	const d = new Date()
@@ -529,6 +541,13 @@ export default function TimetableDetailPage({
 
 	async function handleGenerate(options?: {
 		distribution?: string
+		targets?: Array<{
+			student_id?: string
+			couple_id?: string
+			desired_lessons_count: number
+			priority?: string
+			preferred_trainer_id?: string | null
+		}>
 		group_targets?: Array<{
 			group_id: string
 			group_lesson_type_id: string
@@ -540,10 +559,28 @@ export default function TimetableDetailPage({
 		if (!id) return
 		setGenerating(true)
 		try {
-			const body: { week_start: string; distribution?: string; group_targets?: Array<{ group_id: string; group_lesson_type_id: string; desired_lessons_count: number; priority?: string; preferred_trainer_id?: string | null }> } = {
+			const body: {
+				week_start: string
+				distribution?: string
+				targets?: Array<{
+					student_id?: string
+					couple_id?: string
+					desired_lessons_count: number
+					priority?: string
+					preferred_trainer_id?: string | null
+				}>
+				group_targets?: Array<{
+					group_id: string
+					group_lesson_type_id: string
+					desired_lessons_count: number
+					priority?: string
+					preferred_trainer_id?: string | null
+				}>
+			} = {
 				week_start: weekStart,
 			}
 			if (options?.distribution) body.distribution = options.distribution
+			if (options?.targets?.length) body.targets = options.targets
 			if (options?.group_targets?.length) body.group_targets = options.group_targets
 			const res = await fetch(`/api/club/timetables/${id}/generate`, {
 				method: "POST",
@@ -1378,7 +1415,17 @@ function SettingsDialog({
 	setWeekStart: (s: string) => void
 	onSaved: () => void | Promise<void>
 	onGenerated: () => void
-	onGenerate: (opts?: { distribution?: string; group_targets?: Array<{ group_id: string; group_lesson_type_id: string; desired_lessons_count: number; priority?: string; preferred_trainer_id?: string | null }> }) => Promise<void>
+	onGenerate: (opts?: {
+		distribution?: string
+		targets?: Array<{
+			student_id?: string
+			couple_id?: string
+			desired_lessons_count: number
+			priority?: string
+			preferred_trainer_id?: string | null
+		}>
+		group_targets?: Array<{ group_id: string; group_lesson_type_id: string; desired_lessons_count: number; priority?: string; preferred_trainer_id?: string | null }>
+	}) => Promise<void>
 	generating: boolean
 }) {
 	const { timetable, preferences, targets, trainer_limits, group_targets = [], groups = [], group_lesson_types = [] } = data
@@ -1393,12 +1440,43 @@ function SettingsDialog({
 	const [limits, setLimits] = useState<Record<string, number>>(
 		() => Object.fromEntries(trainer_limits.map((l) => [l.user_id, l.max_lessons_per_day]))
 	)
+	const allowedTimetableTrainerIds = useMemo(() => new Set(trainer_limits.map((l) => l.user_id)), [trainer_limits])
+	const normalizePreferredTrainer = useCallback(
+		(pid: string | null | undefined) => (pid && allowedTimetableTrainerIds.has(pid) ? pid : null),
+		[allowedTimetableTrainerIds]
+	)
 	const [targetEdits, setTargetEdits] = useState<Record<string, { desired_lessons_count: number; priority: string; preferred_trainer_id: string | null }>>(
-		() => Object.fromEntries(targets.map((t) => [t.id, { desired_lessons_count: t.desired_lessons_count, priority: t.priority, preferred_trainer_id: t.preferred_trainer_id }]))
+		() =>
+			Object.fromEntries(
+				targets.map((t) => [
+					t.id,
+					{
+						desired_lessons_count: t.desired_lessons_count,
+						priority: t.priority,
+						preferred_trainer_id:
+							t.preferred_trainer_id && allowedTimetableTrainerIds.has(t.preferred_trainer_id)
+								? t.preferred_trainer_id
+								: null,
+					},
+				])
+			)
 	)
 	const [groupTargetEdits, setGroupTargetEdits] = useState<
 		Record<string, { desired_lessons_count: number; priority: string; preferred_trainer_id: string | null }>
-	>(() => Object.fromEntries(group_targets.map((t) => [t.id, { desired_lessons_count: t.desired_lessons_count, priority: t.priority, preferred_trainer_id: t.preferred_trainer_id }])))
+	>(() =>
+		Object.fromEntries(
+			group_targets.map((t) => [
+				t.id,
+				{
+					desired_lessons_count: t.desired_lessons_count,
+					priority: t.priority,
+					preferred_trainer_id:
+						t.preferred_trainer_id && allowedTimetableTrainerIds.has(t.preferred_trainer_id)
+							? t.preferred_trainer_id
+							: null,
+				},
+			])
+		))
 	type NewGroupTarget = { group_id: string; group_lesson_type_id: string; desired_lessons_count: number; priority: string; preferred_trainer_id: string | null }
 	const [newGroupTargets, setNewGroupTargets] = useState<NewGroupTarget[]>([])
 	const [saving, setSaving] = useState(false)
@@ -1414,10 +1492,32 @@ function SettingsDialog({
 		setPrefDistribution(preferences?.distribution ?? "same")
 		setBuffer(preferences?.buffer_between_lessons_minutes ?? 0)
 		setLimits(Object.fromEntries(trainer_limits.map((l) => [l.user_id, l.max_lessons_per_day])))
-		setTargetEdits(Object.fromEntries(targets.map((t) => [t.id, { desired_lessons_count: t.desired_lessons_count, priority: t.priority, preferred_trainer_id: t.preferred_trainer_id }])))
-		setGroupTargetEdits(Object.fromEntries(group_targets.map((t) => [t.id, { desired_lessons_count: t.desired_lessons_count, priority: t.priority, preferred_trainer_id: t.preferred_trainer_id }])))
+		setTargetEdits(
+			Object.fromEntries(
+				targets.map((t) => [
+					t.id,
+					{
+						desired_lessons_count: t.desired_lessons_count,
+						priority: t.priority,
+						preferred_trainer_id: normalizePreferredTrainer(t.preferred_trainer_id),
+					},
+				])
+			)
+		)
+		setGroupTargetEdits(
+			Object.fromEntries(
+				group_targets.map((t) => [
+					t.id,
+					{
+						desired_lessons_count: t.desired_lessons_count,
+						priority: t.priority,
+						preferred_trainer_id: normalizePreferredTrainer(t.preferred_trainer_id),
+					},
+				])
+			)
+		)
 		setNewGroupTargets([])
-	}, [open, timetable.name, timetable.day_start, timetable.day_end, preferences, trainer_limits, targets, group_targets])
+	}, [open, timetable.name, timetable.day_start, timetable.day_end, preferences, trainer_limits, targets, group_targets, normalizePreferredTrainer])
 
 	async function handleSave(): Promise<boolean> {
 		setSaving(true)
@@ -1443,7 +1543,7 @@ function SettingsDialog({
 							couple_id: t.couple_id ?? undefined,
 							desired_lessons_count: e?.desired_lessons_count ?? t.desired_lessons_count,
 							priority: e?.priority ?? t.priority,
-							preferred_trainer_id: e?.preferred_trainer_id ?? t.preferred_trainer_id,
+							preferred_trainer_id: preferredTrainerFromEdits(e, t.preferred_trainer_id),
 						}
 					}),
 					group_targets: [
@@ -1454,7 +1554,7 @@ function SettingsDialog({
 								group_lesson_type_id: gt.group_lesson_type_id,
 								desired_lessons_count: e?.desired_lessons_count ?? gt.desired_lessons_count,
 								priority: e?.priority ?? gt.priority,
-								preferred_trainer_id: e?.preferred_trainer_id ?? gt.preferred_trainer_id,
+								preferred_trainer_id: preferredTrainerFromEdits(e, gt.preferred_trainer_id),
 							}
 						}),
 						...newGroupTargets.filter((n) => n.group_id && n.group_lesson_type_id),
@@ -1492,7 +1592,7 @@ function SettingsDialog({
 					group_lesson_type_id: gt.group_lesson_type_id,
 					desired_lessons_count: e?.desired_lessons_count ?? gt.desired_lessons_count,
 					priority: e?.priority ?? gt.priority,
-					preferred_trainer_id: e?.preferred_trainer_id ?? gt.preferred_trainer_id,
+					preferred_trainer_id: preferredTrainerFromEdits(e, gt.preferred_trainer_id),
 				}
 			}),
 			...newGroupTargets.filter((n) => n.group_id && n.group_lesson_type_id).map((n) => ({
@@ -1505,6 +1605,20 @@ function SettingsDialog({
 		]
 		await onGenerate({
 			distribution: prefDistribution,
+			...(targets.length
+				? {
+						targets: targets.map((t) => {
+							const e = targetEdits[t.id]
+							return {
+								student_id: t.student_id ?? undefined,
+								couple_id: t.couple_id ?? undefined,
+								desired_lessons_count: e?.desired_lessons_count ?? t.desired_lessons_count,
+								priority: e?.priority ?? t.priority,
+								preferred_trainer_id: preferredTrainerFromEdits(e, t.preferred_trainer_id),
+							}
+						}),
+					}
+				: {}),
 			...(combinedGroupTargets.length ? { group_targets: combinedGroupTargets } : {}),
 		})
 		onGenerated()
@@ -1577,6 +1691,9 @@ function SettingsDialog({
 							<ul className="space-y-2 max-h-40 overflow-y-auto">
 								{targets.map((t) => {
 									const e = targetEdits[t.id]
+									const rawTrainerPref = preferredTrainerFromEdits(e, t.preferred_trainer_id)
+									const trainerSelectValue =
+										rawTrainerPref && allowedTimetableTrainerIds.has(rawTrainerPref) ? rawTrainerPref : "__any__"
 									return (
 										<li key={t.id} className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
 											<span className="font-medium shrink-0">{t.label}</span>
@@ -1592,7 +1709,19 @@ function SettingsDialog({
 													<SelectItem value="low">Low</SelectItem>
 												</SelectContent>
 											</Select>
-											<Select value={e?.preferred_trainer_id ?? t.preferred_trainer_id ?? "__any__"} onValueChange={(v) => setTargetEdits((prev) => ({ ...prev, [t.id]: { desired_lessons_count: (prev[t.id] ?? t).desired_lessons_count, priority: (prev[t.id] ?? t).priority, preferred_trainer_id: v === "__any__" ? null : v } }))}>
+											<Select
+												value={trainerSelectValue}
+												onValueChange={(v) =>
+													setTargetEdits((prev) => ({
+														...prev,
+														[t.id]: {
+															desired_lessons_count: (prev[t.id] ?? t).desired_lessons_count,
+															priority: (prev[t.id] ?? t).priority,
+															preferred_trainer_id: v === "__any__" ? null : v,
+														},
+													}))
+												}
+											>
 												<SelectTrigger className="h-7 min-w-[100px] max-w-[140px] rounded border border-input bg-background text-xs text-foreground">
 													<SelectValue placeholder="Any" />
 												</SelectTrigger>
@@ -1617,6 +1746,11 @@ function SettingsDialog({
 							<ul className="space-y-2 max-h-40 overflow-y-auto">
 								{group_targets.map((gt) => {
 									const e = groupTargetEdits[gt.id]
+									const rawGroupTrainerPref = preferredTrainerFromEdits(e, gt.preferred_trainer_id)
+									const groupTrainerSelectValue =
+										rawGroupTrainerPref && allowedTimetableTrainerIds.has(rawGroupTrainerPref)
+											? rawGroupTrainerPref
+											: "__any__"
 									return (
 										<li key={gt.id} className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
 											<span className="font-medium shrink-0">{gt.label}</span>
@@ -1632,7 +1766,19 @@ function SettingsDialog({
 													<SelectItem value="low">Low</SelectItem>
 												</SelectContent>
 											</Select>
-											<Select value={e?.preferred_trainer_id ?? gt.preferred_trainer_id ?? "__any__"} onValueChange={(v) => setGroupTargetEdits((prev) => ({ ...prev, [gt.id]: { desired_lessons_count: (prev[gt.id] ?? gt).desired_lessons_count, priority: (prev[gt.id] ?? gt).priority, preferred_trainer_id: v === "__any__" ? null : v } }))}>
+											<Select
+												value={groupTrainerSelectValue}
+												onValueChange={(v) =>
+													setGroupTargetEdits((prev) => ({
+														...prev,
+														[gt.id]: {
+															desired_lessons_count: (prev[gt.id] ?? gt).desired_lessons_count,
+															priority: (prev[gt.id] ?? gt).priority,
+															preferred_trainer_id: v === "__any__" ? null : v,
+														},
+													}))
+												}
+											>
 												<SelectTrigger className="h-7 min-w-[100px] max-w-[140px] rounded border border-input bg-background text-xs text-foreground">
 													<SelectValue placeholder="Any" />
 												</SelectTrigger>
@@ -1646,8 +1792,13 @@ function SettingsDialog({
 										</li>
 									)
 								})}
-								{newGroupTargets.map((n, idx) => (
-									<li key={`new-${idx}`} className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-muted/10 px-3 py-2 text-sm">
+								{newGroupTargets.map((n, idx) => {
+									const newRowTrainerValue =
+										n.preferred_trainer_id && allowedTimetableTrainerIds.has(n.preferred_trainer_id)
+											? n.preferred_trainer_id
+											: "__any__"
+									return (
+										<li key={`new-${idx}`} className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-muted/10 px-3 py-2 text-sm">
 										<Select value={n.group_id || "__none__"} onValueChange={(v) => setNewGroupTargets((prev) => prev.map((x, i) => (i === idx ? { ...x, group_id: v === "__none__" ? "" : v, group_lesson_type_id: "" } : x)))}>
 											<SelectTrigger className="h-7 min-w-[100px] rounded border border-input bg-background text-xs text-foreground">
 												<SelectValue placeholder="Group…" />
@@ -1681,7 +1832,14 @@ function SettingsDialog({
 												<SelectItem value="low">Low</SelectItem>
 											</SelectContent>
 										</Select>
-										<Select value={n.preferred_trainer_id ?? "__any__"} onValueChange={(v) => setNewGroupTargets((prev) => prev.map((x, i) => (i === idx ? { ...x, preferred_trainer_id: v === "__any__" ? null : v } : x)))}>
+										<Select
+											value={newRowTrainerValue}
+											onValueChange={(v) =>
+												setNewGroupTargets((prev) =>
+													prev.map((x, i) => (i === idx ? { ...x, preferred_trainer_id: v === "__any__" ? null : v } : x))
+												)
+											}
+										>
 											<SelectTrigger className="h-7 min-w-[100px] max-w-[140px] rounded border border-input bg-background text-xs text-foreground">
 												<SelectValue placeholder="Any" />
 											</SelectTrigger>
@@ -1693,8 +1851,9 @@ function SettingsDialog({
 											</SelectContent>
 										</Select>
 										<Button type="button" variant="ghost" size="sm" className="shrink-0 h-7 px-1.5" onClick={() => setNewGroupTargets((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
-									</li>
-								))}
+										</li>
+									)
+								})}
 							</ul>
 						)}
 						{groups.length > 0 && group_lesson_types.length > 0 && (
